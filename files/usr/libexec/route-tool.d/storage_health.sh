@@ -91,6 +91,13 @@ if [ -n "$MMC_SYS" ]; then
         echo "EMMC_RPMB_SIZE_KB=$RPMB_KB"
         VER_HEX="$(rt_ext_csd_byte_hex "$EXT_CSD" 192)"
         VER_DEC="$(rt_hex2dec "$VER_HEX")"
+        # eMMC版本判定：byte192=EXT_CSD_REV(规范版本)
+        # 但实际路由器eMMC颗粒基本都是5.1，byte308=CMDQ是5.1新增特性
+        # byte192=8(5.01) + CMDQ支持 → 实际颗粒为5.1
+        CMDQ_HEX="$(rt_ext_csd_byte_hex "$EXT_CSD" 308)"
+        CMDQ_DEC="$(rt_hex2dec "$CMDQ_HEX")"
+        DEV_TYPE_HEX="$(rt_ext_csd_byte_hex "$EXT_CSD" 196)"
+        DEV_TYPE_DEC="$(rt_hex2dec "$DEV_TYPE_HEX")"
         case "$VER_DEC" in
             0) VER_TXT="4.0" ;; 1) VER_TXT="4.1" ;;
             2) VER_TXT="4.2" ;; 3) VER_TXT="4.3" ;;
@@ -99,7 +106,15 @@ if [ -n "$MMC_SYS" ]; then
             8) VER_TXT="5.01" ;; 9) VER_TXT="5.1" ;;
             10) VER_TXT="5.1B" ;; *) VER_TXT="未知(0x$VER_HEX)" ;;
         esac
+        # CMDQ(byte308)是eMMC 5.1新增特性，有CMDQ+byte192=5.01→实际5.1
+        if [ "$VER_DEC" -eq 8 ] && [ "$CMDQ_DEC" -gt 0 ]; then
+            VER_TXT="5.1"
+            VER_NOTE="CMDQ支持，规范5.01→颗粒5.1"
+        fi
         echo "EMMC_VERSION=$VER_TXT"
         echo "EMMC_VERSION_RAW=0x$VER_HEX"
+        [ -n "$VER_NOTE" ] && echo "EMMC_VERSION_NOTE=$VER_NOTE"
+        echo "EMMC_DEVICE_TYPE=0x$DEV_TYPE_HEX"
+        echo "EMMC_CMDQ_SUPPORT=$CMDQ_DEC"
     fi
 fi
