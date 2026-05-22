@@ -188,7 +188,7 @@ function updateCapacity(d) {
   } else if (typ === 'eMMC') {
     html += '<div class="rt-k">eMMC数据</div><div>未发现独立可写挂载点</div>';
   }
-  if (d.NAND_TOTAL_MB) html += '<div class="rt-k">NAND总量</div><div>' + fmtMB(d.NAND_TOTAL_MB) + ' · MTD ' + esc(d.NAND_MTD_COUNT || '-') + ' 个</div>';
+  if (d.NAND_TOTAL_MB && parseInt(d.NAND_MTD_COUNT || '0') > 0) html += '<div class="rt-k">NAND总量</div><div>' + fmtMB(d.NAND_TOTAL_MB) + ' · MTD ' + esc(d.NAND_MTD_COUNT || '-') + ' 个</div>';
   if (d.SPEED_TEST_MOUNT) html += '<div class="rt-k">测速分区</div><div><code>' + esc(d.SPEED_TEST_MOUNT) + '</code> ' + esc(d.SPEED_TEST_DEV || '') + '</div>';
 
   box.innerHTML = html || '<div class="rt-k">状态</div><div>未读取到容量信息</div>';

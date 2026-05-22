@@ -74,6 +74,7 @@ rt_emmc_manf_name() {
         # 国产/代工
         88|d6) echo "Longsys(江波龙)" ;;
         f4) echo "BIWIN(佰维)" ;;
+        ea) echo "SPeMMC/深圳 SPeMMC" ;;
         fe) echo "Micron(美光)" ;;
         # 未知
         "") echo "未知" ;;
