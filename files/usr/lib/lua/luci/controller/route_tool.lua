@@ -1,3 +1,5 @@
+-- Route Tool LuCI Controller
+-- by 数码罗记 · godsun.pro
 module("luci.controller.route_tool", package.seeall)
 
 function index()

@@ -71,7 +71,3 @@ make package/luci-app-route-tool/compile
 ## License
 
 MIT
-
----
-
-*by 数码罗记 · godsun.pro*

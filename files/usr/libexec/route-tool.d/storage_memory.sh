@@ -1,3 +1,4 @@
+# by 数码罗记 · godsun.pro
 #!/bin/sh
 # Memory Pressure Test - tmpfs fill stability check
 # Usage: storage_memory.sh [mode:info|quick|standard|full|stress|burnin] [size_MB] [duration_sec]
