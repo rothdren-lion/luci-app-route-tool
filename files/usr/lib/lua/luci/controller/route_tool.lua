@@ -12,7 +12,7 @@ function index()
     entry({"admin", "system", "route_tool", "health"}, call("health"), nil).leaf = true
 end
 
-local CURRENT_VERSION = "0.3.15-1"
+local CURRENT_VERSION = "0.3.16-1"
 local UPDATE_BASE_URL = "https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download"
 local UPDATE_VERSION_URL = UPDATE_BASE_URL .. "/VERSION"
 local UPDATE_IPK_URL = UPDATE_BASE_URL .. "/luci-app-route-tool_all.ipk"
