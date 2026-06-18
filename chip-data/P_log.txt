@@ -1,0 +1,60 @@
+
+
+APP Version : 13.03   Model : T76  MFG:2025-03-20
+
+     Device : AUTO EMMC_8B_1.8V @BGA153(recommend)
+
+Original XGECU Adapter Found:  ADP_EMMC_BGA153
+
+Pin Detected Passed.
+
+Init EMMC... OK!    ( OCR register: C0FF8080 )
+
+Reading ECSD : Succeeded 
+
+      Authentication Key not yet programmed, RPMB not used
+
+D:Calcu.available disk capacity: 137 GB
+
+Reading BOOT1 : Succeeded. Time : 0. 94 S -- Partition Size :4096 KB
+
+Reading BOOT2 : Succeeded. Time : 0. 93 S -- Partition Size :4096 KB
+
+Reading User Area : Succeeded. Time : 90.610 S -- Partition Size :7634944 KB
+
+    Note:the meomory space 25.27% used
+
+Reading Succeeded 32 bits CheckSum :  0x F8E63244
+
+All saved to the folder:  D:\Xgpro_T76\UserData\EMMC_Data\oes-a311d-armbian-Abc123
+
+
+
+Verify Restart EMMC ....
+
+Init EMMC... OK!    ( OCR register: C0FF8080 )
+
+Verifying CSD Succeeded 
+
+Verifying ECSD Succeeded 
+
+Verifying BOOT1 : Succeeded. Time : 0. 63 S -- Partition Size :4096 KB Processing Size from the File : 4096 KB )
+
+Verifying BOOT2 : Succeeded. Time : 0. 63 S -- Partition Size :4096 KB Processing Size from the File : 4096 KB )
+
+    Note: The actual USER space of the file is appr.: 1884 MB
+
+Verifying User Area : Succeeded. Time : 23.469 S -- Partition Size :7634944 KB( Processing Size from the File : 7634944 KB )
+
+Verifying Succeeded  32 bits CheckSum :  0x F8E63244
+
+Reading +Verifying  Succeeded   Total Time : 1 M 55 S
+
+
+
+Saved ONE_KEY_GHOST project to file:
+
+D:\Xgpro_T76\UserData\EMMC_Data\oes-a311d-armbian-Abc123\EMMC_Ghost.mpj
+
+Read SUCCESSFUL!
+

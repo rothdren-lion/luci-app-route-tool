@@ -1,0 +1,145 @@
+
+APP Version : 13.19   Model : T76  MFG:2025-03-20
+     Device : AUTO-EMMC_8B_1.8V @BGA153(recommend)
+
+*************************************************
+ 1 Programmer Connected.
+*************************************************
+  Device 1: XGecu T76 Ver: 00.01.17
+       USB POWER VOLTAGE: 05.050V
+       USB SPEED MODE: USB3.0 SS 5Gbps
+
+*************************************************
+
+  < Analysis  IC >
+
+    Pin Detected Passed.
+
+      **********************************
+      * Clock Frequence is 8.000 MHZ   *
+      **********************************
+
+      1..Emmc Initialization ......
+             OCR register : C0FF8080
+      2..Read device CID .......Successed
+      3..Read device CSD .......Successed
+      4..Read device ECSD ......Successed
+
+  <1> -- Production Info.and Device life time--
+
+      MID          : 90
+      PNM          : H8G4a�
+      Product Date : 12-2016
+      Version      : MMC V5.1
+
+      Device life time Type A : 0%-10% device life time used  
+      Device life time Type B : Exceeded its maximum estimated device life time
+      Device life time (PRE_EOL_INFO) : Urgent
+
+      High Speed Support - DEVICE_TYPE[196]
+
+      High-Speed eMMC at 26 MHz     : YES
+      High-Speed eMMC at 52 MHz     : YES
+      High-Speed DDR eMMC at 52 MHz - 1.8V or 3V I/O  : YES
+      High-Speed DDR eMMC at 52 MHz - 1.2V I/O        : NO
+      HS200 SDR      - 1.8V I/O        : YES
+      HS200 SDR      - 1.2V I/O        : NO
+      HS400 DDR      - 1.8V I/O        : YES
+      HS400 DDR      - 1.2V I/O        : NO
+      HS400 STROBE_SUPPORT[184]        : YES
+
+  <2> -- Partition Size Info.--
+
+      BOOT1 SIZE   : 4096 KB
+      BOOT2 SIZE   : 4096 KB
+      RPMB SIZE    : 4096 KB
+      GPP1 SIZE    : 0 KB
+      GPP2 SIZE    : 0 KB
+      GPP3 SIZE    : 0 KB
+      GPP4 SIZE    : 0 KB
+      USER SIZE    : 7456 MB
+                      ( 0x 01_D200_0000 )
+
+  <3> -- RPMB Security and Password --
+
+      Authentication Key not yet programmed, RPMB not used
+
+      Password Protect Features : YES
+      Password Protected        : Not Locked
+
+  <4> -- Write Protection --
+
+      ERASE_GROUP_DEF          : 00
+      Disable  PERM_WP_PROTECT : No
+      User Permanent protection: Enable
+      Whole Chip Permanent Protect  : Not protected
+      Whole Chip Temporary Protect  : Not protected
+      BOOT1 Write Protection Status : Not protected
+      BOOT2 Write Protection Status : Not protected
+
+      Write Protect Group Size : 0x400000 ( 4096 KB )
+
+      User Write Protection Group (0=Not Protected  TE=Temp Protected  PO=Power On Protected  PE=Permanently Protected)
+      ----------------------------------------------------------------------------------------------------------------------
+       WPG  Start Addr.   0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31
+      ----------------------------------------------------------------------------------------------------------------------
+      00000 00-00000000   0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  
+      00032 00-08000000   0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  
+
+      ..............
+
+      01856 01-D0000000   0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  
+      ----------------------------------------------------------------------------------------------------------------------
+      USER Partiton --- Not any Write Protected . Total Write Protect Groups : 1864
+
+
+  <5> -- other Informations --
+
+      MAX_READ_BL_LEN   : 512 bytes
+      MAX_WRITE_BL_LEN  : 512 bytes
+      MAX_TRAN_SPEED    : 55.000 MHZ (Normal Mode)
+
+      BOOT_BUS_CONDITIONS[177]    : 00
+      BOOT_CONFIG_PROT[178]       : 00
+      PARTITION_CONFIG[179]       : 48
+      RST_n_FUNCTION[162]         : 01
+      PARTITIONING_SUPPORT[160]   : 07
+
+      ENH_START_ADDR              : 00000000
+      ENH_SIZE_MULT               : 000000
+      MAX_ENH_SIZE_MULT           : 0003A4
+      PARTITIONS_ATTRIBUTE        : 00
+      WR_REL_SET                  : 1F
+      WR_REL_PARAM                : 15
+      PARTITION_SETTING_COMPLETED : 00
+
+      HC_WP_GRP_SIZE    : 8
+      HC_ERASE_GRP_SIZE : 1
+      WP_GRP_ENABLE     : 1
+      WP_GRP_SIZE       : 7
+      ERASE_GRP_MULT    : 31
+      ERASE_GRP_SIZE    : 31
+      CCC               : 00F5
+      DSR implemented   : 0
+      PARTITION_ACCESS  : 10 ms
+      ERASED_MEM_CONT   : 00
+      DYNCAP_NEEDED     : 00
+      SECURE_WP_INFO    : 01
+      SEC_ERASE_MULT    : 0A
+      ERASE_TIMEOUT_MULT: 02
+      NATIVE_SECTOR_SIZE: 01 (4096B)
+      INI_TIMEOUT_AP    : 1000 ms
+      INI_TIMEOUT_EMU       : 1000 ms
+
+  <6> -- Result -- View More Information in ECSD and CSD 
+      ----------------------------------------------------------------------------------------------------------------------
+
+      1 . BOOT1 Partition Not be Permanent write-protected, it can be Read or Edited or Erased.
+      2 . BOOT2 Partition Not be Permanent write-protected, it can be Read or Edited or Erased.
+      3 . GPP1 GPP2 GPP3 GPP4 The Partition Invalid
+      4 . USER  Partition Not be Permanent write-protected, it can be Read or Edited or Erased.
+      5 . RPMB  Partition is Blank, not be Used.
+      6 . This chip's content can be completely copied to another chip .
+
+      ----------------------------------------------------------------------------------------------------------------------
+
