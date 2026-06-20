@@ -1,5 +1,5 @@
 Package: luci-app-route-tool
-Version: 0.3.20-1
+Version: 0.3.21-1
 Architecture: all
 Maintainer: godsun.pro
 Section: luci
