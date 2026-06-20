@@ -364,10 +364,139 @@ write_part(){
     fi
 }
 
+# Allocate unpartitioned eMMC space as a new "storage" partition (ext4, auto-mount)
+alloc_storage(){
+    confirm="${1:-}"
+    emmc="$(find_emmc)" || { err "未发现 eMMC 设备"; exit 3; }
+    base="$(basename "$emmc")"
+
+    # Check for sgdisk, auto-install if missing
+    if ! command -v sgdisk >/dev/null 2>&1; then
+        echo "正在安装 sgdisk (gdisk 包)..."
+        opkg update >/dev/null 2>&1 || { err "opkg update 失败，无法自动安装 gdisk"; exit 4; }
+        opkg install gdisk >/dev/null 2>&1 || { err "gdisk 安装失败，请手动安装: opkg install gdisk"; exit 4; }
+        echo "sgdisk 安装完成。"
+    fi
+
+    # Find free space after last partition
+    free_info="$(sgdisk -p "$emmc" 2>/dev/null | tail -1)"
+    if [ -z "$free_info" ]; then
+        err "无法读取 eMMC 分区表"; exit 5
+    fi
+
+    # Get last sector and total sectors
+    last_part_end="$(sgdisk -i 0 "$emmc" 2>/dev/null | sed -n 's/^Last usable sector.*: \([0-9]*\)/\1/p')"
+    # Better: parse free space from sgdisk
+    # sgdisk -p shows:  start  end  size  code  name
+    # Get the end sector of the last partition
+    last_end=0
+    sgdisk -p "$emmc" 2>/dev/null | tail -n +2 | while read num start end size code name; do
+        [ "$end" -gt "$last_end" ] 2>/dev/null && echo "$end"
+    done | sort -n | tail -1 > /tmp/route-tool-alloc-last-end
+    last_end="$(cat /tmp/route-tool-alloc-last-end 2>/dev/null || echo 0)"
+    rm -f /tmp/route-tool-alloc-last-end
+
+    disk_end="$(cat /sys/class/block/$base/size 2>/dev/null)"
+    [ -n "$disk_end" ] || { err "无法读取 eMMC 容量"; exit 5; }
+    # disk_end is in 512-byte sectors
+    disk_end=$((disk_end - 1))  # last sector
+
+    # Align to 1MB (2048 sectors)
+    next_start=$(( (last_end + 1 + 2047) / 2048 * 2048 ))
+    free_sectors=$((disk_end - next_start + 1))
+    free_mb=$((free_sectors * 512 / 1024 / 1024))
+
+    if [ "$free_sectors" -lt 2048 ]; then
+        err "eMMC 无可用未分配空间（剩余 ${free_mb}MB，最小需要 1MB）"
+        exit 5
+    fi
+
+    # Check if already a partition named "storage" exists
+    existing="$(sgdisk -p "$emmc" 2>/dev/null | grep -i storage || true)"
+    if [ -n "$existing" ]; then
+        err "已存在名为 storage 的分区：$existing"; exit 6
+    fi
+
+    if [ "$confirm" != "YES" ]; then
+        # Dry-run / preview mode: return info without making changes
+        printf "将在 %s 上新建分区：\n" "$emmc"
+        printf "  起始扇区: %s (对齐 1MB)\n" "$next_start"
+        printf "  结束扇区: %s\n" "$disk_end"
+        printf "  大小: %s MB\n" "$free_mb"
+        printf "  分区名: storage\n"
+        printf "  文件系统: ext4\n"
+        printf "  UUID: 48d0489a-e32f-49be-a46d-91cf1dac4da9\n"
+        printf "  挂载点: /mnt/%spN (自动确定)\n" "$base"
+        exit 0
+    fi
+
+    lock_begin
+
+    # Backup GPT before modifying
+    sgdisk --backup="/tmp/route-tool-gpt-before-alloc-$$.bin" "$emmc" >/dev/null 2>&1 || true
+
+    # Create new partition
+    echo "正在新建分区..."
+    sgdisk -n "0:$next_start:$disk_end" -c "0:storage" -t "0:8300" "$emmc" >/dev/null 2>&1 || {
+        err "sgdisk 新建分区失败"; exit 6
+    }
+
+    # Partprobe / blockdev reread to pick up new partition
+    command -v partprobe >/dev/null 2>&1 && partprobe "$emmc" 2>/dev/null || true
+    # Wait for new partition device to appear
+    sleep 2
+
+    # Find the new partition device
+    new_part=""
+    for i in $(seq 30 -1 1); do
+        dev="/dev/${base}p${i}"
+        [ -b "$dev" ] && new_part="$dev"
+    done
+    # More reliable: find the partition with PARTNAME=storage
+    for p in /sys/class/block/${base}p*; do
+        [ -f "$p/uevent" ] || continue
+        pname="$(sed -n 's/^PARTNAME=//p' "$p/uevent" 2>/dev/null | head -1)"
+        case "$pname" in 0:*) pname="${pname#0:}" ;; esac
+        if [ "$pname" = "storage" ]; then
+            new_part="/dev/$(basename "$p")"
+            break
+        fi
+    done
+
+    if [ -z "$new_part" ] || [ ! -b "$new_part" ]; then
+        err "新建分区设备未出现，可能需要重启。GPT 已修改。"
+        exit 7
+    fi
+
+    pnum="$(basename "$new_part" | sed "s/${base}p//")"
+
+    # Format ext4 with specified UUID
+    echo "正在格式化 $new_part 为 ext4..."
+    mkfs.ext4 -U "48d0489a-e32f-49be-a46d-91cf1dac4da9" -L "storage" "$new_part" >/dev/null 2>&1 || {
+        err "ext4 格式化失败"; exit 8
+    }
+
+    # Auto mount
+    mnt="/mnt/$(basename "$new_part")"
+    echo "正在挂载 $new_part -> $mnt ..."
+    mkdir -p "$mnt"
+    mount "$new_part" "$mnt" 2>/dev/null || {
+        err "挂载失败，分区已创建并格式化。请手动: mount $new_part $mnt"; exit 9
+    }
+
+    echo "✅ eMMC 存储分区创建完成"
+    echo "  设备: $new_part"
+    echo "  挂载: $mnt"
+    echo "  大小: ${free_mb}MB"
+    echo "  UUID: 48d0489a-e32f-49be-a46d-91cf1dac4da9"
+    echo "  文件系统: ext4"
+}
+
 cmd="${1:-list}"
 case "$cmd" in
     list) list_json ;;
     backup) [ -n "${2:-}" ] || { err "缺少分区名"; exit 2; }; backup_part "$2" ;;
     write) [ -n "${2:-}" ] && [ -n "${3:-}" ] || { err "用法：route-tool write 分区 文件 YES"; exit 2; }; write_part "$2" "$3" "${4:-}" ;;
+    alloc_storage) alloc_storage "${2:-}" ;;
     *) err "未知命令：$cmd"; exit 2 ;;
 esac

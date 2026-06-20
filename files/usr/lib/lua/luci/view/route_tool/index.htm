@@ -56,7 +56,7 @@
 </style>
 
 <div class="rt-wrap">
-  <h2 name="content"><%:Route Tool + Storage Health 存储诊断分区工具%><span class="rt-page-version" onclick="versionClickUpdate()" title="点击检查 GitHub 更新；有更新时再点一次在线更新">v0.3.19</span><span id="ota-badge" class="rt-ota-badge" onclick="versionClickUpdate()" title="点击在线更新插件">可更新</span></h2>
+  <h2 name="content"><%:Route Tool + Storage Health 存储诊断分区工具%><span class="rt-page-version" onclick="versionClickUpdate()" title="点击检查 GitHub 更新；有更新时再点一次在线更新">v0.3.20</span><span id="ota-badge" class="rt-ota-badge" onclick="versionClickUpdate()" title="点击在线更新插件">可更新</span></h2>
   <div class="rt-warn">
     <b>危险提示：</b>写入分区操作很危险，请确定知道自己在玩什么！对应位置写错文件必砖！
   </div>
@@ -324,6 +324,31 @@ function installPluginUpdate() {
 
 function backup(part) {
   window.location = API_BASE + '/backup?part=' + encodeURIComponent(part);
+}
+
+function allocStoragePreview(){
+  log('正在检查 eMMC 可用空间...');
+  var lw=qs('#log-wrap'); if(lw) lw.open=true;
+  fetch(API_BASE+'/alloc_storage?action=preview',{credentials:'same-origin'})
+    .then(function(r){return r.json()})
+    .then(function(j){
+      log(j.ok ? '📋 预览：\n'+j.message : '❌ 预览失败：'+j.message);
+      if(!j.ok) alert('预览失败：\n\n'+j.message);
+    })
+    .catch(function(e){log('❌ 请求失败：'+e);});
+}
+function allocStorageCreate(){
+  if(!confirm('确认在 eMMC 末尾新建 storage 分区？\n\n将使用 sgdisk 新建分区、mkfs.ext4 格式化并自动挂载。\n\n此操作会修改 GPT 分区表，请确保已备份！')) return;
+  log('正在新建 eMMC 存储分区...');
+  var lw=qs('#log-wrap'); if(lw) lw.open=true;
+  fetch(API_BASE+'/alloc_storage?action=create',{credentials:'same-origin'})
+    .then(function(r){return r.json()})
+    .then(function(j){
+      log(j.ok ? '✅ '+j.message : '❌ 失败：'+j.message);
+      if(j.ok){ alert('存储分区创建成功！\n\n'+j.message); }
+      else { alert('创建失败：\n\n'+j.message); }
+    })
+    .catch(function(e){log('❌ 请求失败：'+e); alert('请求失败：'+e);});
 }
 
 function chooseWrite(part) {
@@ -628,6 +653,12 @@ function render(data){
     html += '<div class="rt-actions"><button class="btn cbi-button cbi-button-apply" onclick="backup(\''+esc(p.name)+'\')">备份下载 '+esc(p.name)+'.bin</button><button class="btn cbi-button rt-btn-danger" onclick="chooseWrite(\''+esc(p.name)+'\')">写入</button><input class="rt-upload" id="file_'+id+'" type="file" onchange="doWrite(\''+esc(p.name)+'\', this)"></div></div>';
   });
   if(!html) html='<div class="rt-card">没有发现支持的分区。</div>';
+  // Add eMMC storage allocation card if eMMC is present
+  if(e.present){
+    html+='<div class="rt-card"><div class="rt-title">eMMC 未分配空间<span class="rt-badge" style="background:#e3f2fd;border-color:#90caf9">新建存储分区</span></div>';
+    html+='<div class="rt-meta">将 eMMC 最后未分配的空间新建为 <code>storage</code> 分区，格式化 ext4 并自动挂载到 /mnt/。</div>';
+    html+='<div class="rt-actions"><button class="btn cbi-button cbi-button-apply" onclick="allocStoragePreview()">预览可用空间</button><button class="btn cbi-button rt-btn-danger" onclick="allocStorageCreate()">新建存储分区</button></div></div>';
+  }
   qs('#cards').innerHTML=html;
 }
 fetch(API_BASE + '/api', {credentials:'same-origin'})

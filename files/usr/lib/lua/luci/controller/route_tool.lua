@@ -10,9 +10,10 @@ function index()
     entry({"admin", "system", "route_tool", "sysupgrade"}, call("sysupgrade"), nil).leaf = true
     entry({"admin", "system", "route_tool", "update"}, call("update"), nil).leaf = true
     entry({"admin", "system", "route_tool", "health"}, call("health"), nil).leaf = true
+    entry({"admin", "system", "route_tool", "alloc_storage"}, call("alloc_storage"), nil).leaf = true
 end
 
-local CURRENT_VERSION = "0.3.19-1"
+local CURRENT_VERSION = "0.3.20-1"
 local UPDATE_BASE_URL = "https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download"
 local UPDATE_VERSION_URL = UPDATE_BASE_URL .. "/VERSION"
 local UPDATE_IPK_URL = UPDATE_BASE_URL .. "/luci-app-route-tool_all.ipk"
@@ -332,4 +333,25 @@ function health()
     else
         luci.http.write("ERROR=unknown action\nAVAILABLE=overview,capacity,ports,emmc,nand,speed,memory_quick,memory_standard,memory_full,bootlog,analyze\n")
     end
+end
+
+function alloc_storage()
+    local sys = require "luci.sys"
+    local fs = require "nixio.fs"
+    local action = luci.http.formvalue("action") or "preview"
+    luci.http.prepare_content("application/json")
+
+    local confirm = ""
+    if action == "create" then confirm = "YES" end
+
+    local cmd = "/usr/libexec/route-tool alloc_storage " .. shellquote(confirm) .. " >/tmp/route-tool-alloc-out 2>&1"
+    local rc = sys.call(cmd)
+    local out = fs.readfile("/tmp/route-tool-alloc-out") or ""
+    os.remove("/tmp/route-tool-alloc-out")
+
+    luci.http.write_json({
+        ok = (rc == 0),
+        action = action,
+        message = out ~= "" and out or (rc == 0 and "操作完成" or "操作失败 (exit " .. tostring(rc) .. ")")
+    })
 end
