@@ -12,7 +12,7 @@ function index()
     entry({"admin", "system", "route_tool", "health"}, call("health"), nil).leaf = true
 end
 
-local CURRENT_VERSION = "0.3.15-1"
+local CURRENT_VERSION = "0.3.18-1"
 local UPDATE_BASE_URL = "https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download"
 local UPDATE_VERSION_URL = UPDATE_BASE_URL .. "/VERSION"
 local UPDATE_IPK_URL = UPDATE_BASE_URL .. "/luci-app-route-tool_all.ipk"
@@ -172,7 +172,20 @@ function update()
             luci.http.write_json({ ok = false, current = CURRENT_VERSION, message = "下载更新包失败。" .. (msg ~= "" and ("\n" .. msg) or "") })
             return
         end
+        -- Try opkg first; if it fails with "Malformed package file" (BusyBox missing ar applet),
+        -- fall back to manual tar-based extraction.
         local out = sys.exec("opkg install --force-reinstall " .. shellquote(tmp) .. " 2>&1")
+        if out:match("Malformed package file") then
+            -- Fallback: extract ipk manually (ar archive = debian-binary + control.tar.gz + data.tar.gz)
+            local fallback = "cd /tmp && " ..
+                "tar -xzf " .. shellquote(tmp) .. " 2>/dev/null && " ..
+                "tar -xzf data.tar.gz -C / && " ..
+                "mkdir -p /usr/lib/opkg/info && " ..
+                "tar -xzf control.tar.gz -C /usr/lib/opkg/info/ && " ..
+                "rm -f debian-binary control.tar.gz data.tar.gz && " ..
+                "echo 'Manual install completed (opkg ar fallback).'"
+            out = sys.exec(fallback .. " 2>&1")
+        end
         sys.call("rm -rf /tmp/luci-indexcache /tmp/luci-modulecache/* /tmp/luci-* 2>/dev/null || true")
         sys.call("/etc/init.d/rpcd restart >/dev/null 2>&1 || true")
         sys.call("/etc/init.d/uhttpd restart >/dev/null 2>&1 || true")

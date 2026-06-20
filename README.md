@@ -1,122 +1,66 @@
-# luci-app-route-tool
+# route-tool
 
-OpenWrt LuCI 插件：路由器存储健康诊断 + 分区管理 + 网口检测 + 内存压力测试
+OpenWrt LuCI 路由分区工具：在同一个页面备份/写入关键分区。
 
 ![Route Tool LuCI 界面](screenshots/route-tool-dashboard.png)
 
-## 功能
+- 高通 eMMC：GPT 分区表、cdt、art、appsbl、factory、mibib（部分机型没有）
+- MTK：BL2、fip、factory；如果是 eMMC 机型也显示 GPT 分区表
+- 其他非 eMMC 设备：不显示 GPT，只按实际 MTD 分区显示
+- 备份按钮直接下载：`分区名.bin`
+- 写入自动区分：eMMC 块设备用 `dd`，NAND 用 `flash_erase + nandwrite`，NOR/MTD 优先用 `mtd write`
+- UI：系统 / Route Tool
+- footer：by 数码罗记 · godsun.pro
 
-- **SoC 信息**：CPU 型号、核心数、温度、CoreMark
-- **网口检测**：物理网口状态/速率、WiFi 频段/信道
-- **eMMC 健康检测**：寿命预估、PRE_EOL、制造商识别（38家）
-- **eMMC 读写速度**：实际读写测速 + 颗粒/BOOT/RPMB/CID/版本诊断
-- **eMMC 分区管理**：GPT/cdt/art/appsbl/bl2/fip/factory 备份与写入
-- **内存压力检测**：轻量/标准/写满三档，验证内存可靠性
-- **NAND 检测**：MTD 分区、坏块、ECC 状态
-- **开机日志分析**：异常/警告/提示三级分类
-- **固件更新**：sysupgrade 在线刷机
+## 安装
 
-## 一键安装
+从 GitHub Releases 下载最新 IPK：
 
-```bash
+```sh
 wget -O /tmp/luci-app-route-tool.ipk https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download/luci-app-route-tool_all.ipk
 opkg install /tmp/luci-app-route-tool.ipk
 ```
 
-或从 [Releases](../../releases) 下载版本化 IPK 手动安装：
+### opkg 报错 Malformed package file？
 
-```bash
-opkg install luci-app-route-tool_0.3.15-1_all.ipk
+部分第三方固件（QWRT 等）的 BusyBox 精简了 `ar` applet，导致旧版 opkg 无法解析 ar 格式的 ipk。如果 `opkg install` 报 `Malformed package file`，用手动安装：
+
+```sh
+cd /tmp
+wget -O luci-app-route-tool.ipk https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download/luci-app-route-tool_all.ipk
+# 解包 ipk（ar 归档 = debian-binary + control.tar.gz + data.tar.gz）
+tar -xzf luci-app-route-tool.ipk 2>/dev/null || ar x luci-app-route-tool.ipk
+# 安装文件到系统
+tar -xzf data.tar.gz -C /
+# 注册到 opkg（让 opkg info 能看到，方便后续卸载/升级）
+mkdir -p /usr/lib/opkg/info
+tar -xzf control.tar.gz -C /usr/lib/opkg/info/
+# 清理
+rm -f debian-binary control.tar.gz data.tar.gz luci-app-route-tool.ipk
+# 刷新 LuCI 缓存
+rm -rf /tmp/luci-*
+/etc/init.d/uhttpd restart
 ```
 
-### 在线 OTA
+> **说明**：ipk 本身是标准 ar 归档格式，格式没有问题。问题出在固件端 BusyBox 缺少 `ar` 解包能力。OpenWrt 官方固件不受影响。
 
-v0.3.13 起，页面标题版本号旁会每天自动检查一次 GitHub Releases；发现新版本时显示 `可更新` 小标识，点击即可在线 OTA 更新插件。
+安装后页面标题版本号旁会每天自动检查一次 GitHub Releases；发现新版本时显示 `可更新` 小标识，点击即可在线 OTA 更新插件。
 
-## 使用
+也可以从源码安装：
 
-安装后在 LuCI 后台进入 **系统 → Route Tool** 即可使用。
-
-### 内存压力检测说明
-
-- **轻量**：约 25% 可用内存，保留 /tmp 余量
-- **标准**：约 60% 可用内存
-- **写满**：填满 /tmp 直到 ENOSPC（"No space left" = PASS）
-
-⚠ 内存压力检测结果仅供参考，不代表真实内存带宽。
-
-### eMMC 制造商识别
-
-内置 38 家 eMMC 制造商 ID 映射（mmc-utils 官方仅 13 家），部分由 T76 编程器拆机确认：
-
-- `0xd6/0x88` → Longsys(江波龙) — T76 编程器确认
-- `0xf4` → BIWIN(佰维) — T76 编程器确认
-- `0xea` → SPeMMC/深圳 — 实测
-- `0x0a` → GigaDevice(兆易创新) — 文档
-- `0x01` → Samsung(三星) — mmc-utils
-- 共 38 家，覆盖主流国际 + 国产品牌
-
-### 分区操作危险提示
-
-写入分区操作很危险，请确定知道自己在玩什么！对应位置写错文件必砖！
-
-## 支持设备
-
-- 高通 IPQ6018/IPQ807x 系列（eMMC + GPT 分区）
-- 联发科 MT7981/MT7986 系列（eMMC 或 NAND）
-- 联发科 MT7621 系列（NAND/NOR）
-- 其他 OpenWrt 设备（部分功能可用）
-
-## 文件结构
-
-```
-files/usr/lib/lua/luci/controller/route_tool.lua   — LuCI 控制器
-files/usr/lib/lua/luci/view/route_tool/index.htm   — 前端页面
-files/usr/libexec/route-tool                         — 主后端：分区检测/备份/写入
-files/usr/libexec/route-tool.d/
-  storage_common.sh    — 共享函数库（ext_csd/制造商映射/缓存）
-  storage_system.sh    — SoC/网口/CoreMark/WiFi
-  storage_speed.sh     — eMMC 顺序读写测速
-  storage_memory.sh    — 内存压力测试
-  storage_capacity.sh  — 容量详情
-  storage_health.sh    — eMMC 健康度（ext_csd）
-  storage_detail.sh    — eMMC CID/详情
-  storage_nand.sh      — NAND 信息
-  storage_bootlog.sh   — 启动日志分析
-  storage_smart.sh     — 综合诊断入口
-  storage_analyze.sh   — eMMC 完整分析报告
+```sh
+sh install.sh
 ```
 
-## 版本历史
+## 可选依赖
 
-### v0.3.10
-- 🏷️ eMMC 版本增强：byte192 报 5.01 但 CMDQ>0 时提示可能为 5.1
-- 🎨 容量卡：无 NAND 时隐藏 NAND 总量行
-- 🏷️ 制造商映射：0xea=SPeMMC/深圳
+- GPT 备份/恢复需要 `sgdisk`：`opkg install gdisk`
+- NAND 写入需要 `flash_erase` / `nandwrite`，通常来自 `mtd-utils`
 
-### v0.3.9
-- 🧩 MTK eMMC 分区补全：bl2/fip 纳入可操作分区
-- 🏷️ eMMC 制造商库扩充至 38 家（含 BIWIN 佰维 0xf4）
-- 🚀 测速同时显示诊断信息：颗粒品牌、BOOT1/BOOT2、RPMB、eMMC 版本、CID
+## 后端命令
 
-### v0.3.8
-- 🧠 内存测速 → 内存压力检测：轻量/标准/写满三档
-- 🛡️ 卸载不炸 LuCI：新增 prerm/postrm 脚本
-- 📦 安装→卸载→重装循环验证通过
-
-### v0.3.7
-- 🔧 代码质量修复：统一 ext_csd 偏移量、修复 PRE_EOL bug
-- 🔧 统一制造商 ID 映射为单一来源
-
-### v0.3.6
-- 🎉 初始公开版本
-
-## 技术栈
-
-- 后端：POSIX sh 脚本（BusyBox 兼容）
-- 前端：LuCI + 原生 JS
-- 架构：`all`（纯脚本，无编译依赖）
-
-## License
-
-MIT © 数码罗记 · godsun.pro
+```sh
+/usr/libexec/route-tool list
+/usr/libexec/route-tool backup appsbl > /tmp/appsbl.bin
+/usr/libexec/route-tool write appsbl /tmp/uboot.bin YES
+```

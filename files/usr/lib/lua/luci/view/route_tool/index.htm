@@ -5,7 +5,7 @@
 .rt-health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:14px 0}
 .rt-card{background:var(--cbi-section-bg,#fff);border:1px solid var(--border-color,#ddd);border-radius:10px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .rt-title{font-size:18px;font-weight:700;margin-bottom:6px}
-.rt-page-version{font-size:13px;font-weight:500;opacity:.62;margin-left:6px;vertical-align:baseline}
+.rt-page-version{font-size:13px;font-weight:500;opacity:.62;margin-left:6px;vertical-align:baseline;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}
 .rt-ota-badge{display:none;font-size:12px;font-weight:600;margin-left:8px;padding:2px 7px;border-radius:999px;background:#fff3cd;border:1px solid #ffd666;color:#8a5a00;cursor:pointer;vertical-align:baseline}
 .rt-ota-badge.show{display:inline-block}
 .rt-meta{font-size:12px;opacity:.82;line-height:1.7;word-break:break-all}
@@ -56,7 +56,7 @@
 </style>
 
 <div class="rt-wrap">
-  <h2 name="content"><%:Route Tool + Storage Health 存储诊断分区工具%><span class="rt-page-version">v0.3.15</span><span id="ota-badge" class="rt-ota-badge" onclick="installPluginUpdate()" title="点击在线更新插件">可更新</span></h2>
+  <h2 name="content"><%:Route Tool + Storage Health 存储诊断分区工具%><span class="rt-page-version" onclick="versionClickUpdate()" title="点击检查 GitHub 更新；有更新时再点一次在线更新">v0.3.18</span><span id="ota-badge" class="rt-ota-badge" onclick="versionClickUpdate()" title="点击在线更新插件">可更新</span></h2>
   <div class="rt-warn">
     <b>危险提示：</b>写入分区操作很危险，请确定知道自己在玩什么！对应位置写错文件必砖！
   </div>
@@ -252,37 +252,63 @@ function fwStatus(msg, cls) {
   el.textContent = msg || '';
 }
 
+var otaUpdateReady = false;
+var otaLatestVersion = '';
+
 function setOtaBadge(show, latest) {
   var el = qs('#ota-badge');
   if (!el) return;
+  otaUpdateReady = !!show;
+  otaLatestVersion = latest || '';
   el.className = 'rt-ota-badge' + (show ? ' show' : '');
   if (latest) {
     el.textContent = '可更新 ' + latest.replace(/^-?v?/, 'v');
-    el.title = '发现新版本 ' + latest + '，点击在线更新插件';
+    el.title = '发现新版本 ' + latest + '，再点一次版本号或此标识即可在线更新';
   }
 }
 
-function checkPluginUpdate(force) {
+function checkPluginUpdate(force, interactive) {
   var key = 'route_tool_ota_check_v1';
   var now = Date.now();
   try {
     var cached = JSON.parse(localStorage.getItem(key) || '{}');
     if (!force && cached.ts && now - cached.ts < 86400000) {
       setOtaBadge(!!cached.update_available, cached.latest);
-      return;
+      return Promise.resolve(cached);
     }
   } catch(e) {}
-  fetch(API_BASE + '/update?action=check', {credentials:'same-origin'})
+  if (interactive) log('正在检查 GitHub 最新版本...');
+  return fetch(API_BASE + '/update?action=check', {credentials:'same-origin'})
     .then(function(r){ return r.json(); })
     .then(function(j){
-      try { localStorage.setItem(key, JSON.stringify({ts: now, latest: j.latest || '', update_available: !!j.update_available})); } catch(e) {}
-      setOtaBadge(j.ok && j.update_available, j.latest);
+      var state = {ts: now, latest: j.latest || '', update_available: !!(j.ok && j.update_available)};
+      try { localStorage.setItem(key, JSON.stringify(state)); } catch(e) {}
+      setOtaBadge(state.update_available, state.latest);
+      if (interactive) {
+        if (!j.ok) log('检查更新失败：' + (j.message || '未知错误'));
+        else if (state.update_available) log('发现新版本 ' + j.latest + '。再点一次版本号或“可更新”标识即可在线更新。');
+        else log('已经是最新版本：' + (j.current || '当前版本'));
+      }
+      return state;
     })
-    .catch(function(){ setOtaBadge(false); });
+    .catch(function(e){
+      setOtaBadge(false);
+      if (interactive) log('检查更新失败：' + e);
+      return {update_available:false, error:String(e)};
+    });
+}
+
+function versionClickUpdate() {
+  if (otaUpdateReady) {
+    installPluginUpdate();
+    return;
+  }
+  checkPluginUpdate(true, true);
 }
 
 function installPluginUpdate() {
-  if (!confirm('确认从 GitHub Releases 下载并更新 Route Tool 插件？\n\n会执行 opkg 覆盖安装，并刷新 LuCI/rpcd/uhttpd。')) return;
+  var latest = otaLatestVersion ? ('\n最新版本：' + otaLatestVersion) : '';
+  if (!confirm('确认从 GitHub Releases 下载并更新 Route Tool 插件？' + latest + '\n\n会执行 opkg 覆盖安装，并刷新 LuCI/rpcd/uhttpd。')) return;
   log('正在下载并安装 GitHub 最新版 IPK...');
   fetch(API_BASE + '/update?action=install&confirm=YES', {credentials:'same-origin'})
     .then(function(r){ return r.json(); })
