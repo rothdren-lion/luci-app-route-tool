@@ -450,6 +450,10 @@ alloc_storage(){
 
     if [ "$confirm" != "YES" ]; then
         # Dry-run / preview mode: return info without making changes
+        local warn=""
+        if [ "$free_mb" -lt 500 ]; then
+            warn="⚠️ 可用空间仅 ${free_mb}MB，可能是厂商预留的未使用空间，新建分区可能影响系统稳定性。"
+        fi
         printf "将在 %s 上新建分区：\n" "$emmc"
         printf "  起始扇区: %s (对齐 1MB)\n" "$next_start"
         printf "  结束扇区: %s\n" "$disk_end"
@@ -458,6 +462,7 @@ alloc_storage(){
         printf "  文件系统: ext4\n"
         printf "  UUID: 48d0489a-e32f-49be-a46d-91cf1dac4da9\n"
         printf "  挂载点: /mnt/%spN (自动确定)\n" "$base"
+        [ -n "$warn" ] && printf "\n%s\n" "$warn"
         exit 0
     fi
 

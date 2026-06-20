@@ -337,17 +337,30 @@ function allocStoragePreview(){
     .catch(function(e){log('❌ 请求失败：'+e);});
 }
 function allocStorageCreate(){
-  if(!confirm('确认在 eMMC 末尾新建 storage 分区？\n\n将使用 sgdisk 新建分区、mkfs.ext4 格式化并自动挂载。\n\n此操作会修改 GPT 分区表，请确保已备份！')) return;
-  log('正在新建 eMMC 存储分区...');
+  log('正在检查 eMMC 可用空间...');
   var lw=qs('#log-wrap'); if(lw) lw.open=true;
-  fetch(API_BASE+'/alloc_storage?action=create',{credentials:'same-origin'})
+  fetch(API_BASE+'/alloc_storage?action=preview',{credentials:'same-origin'})
     .then(function(r){return r.json()})
     .then(function(j){
-      log(j.ok ? '✅ '+j.message : '❌ 失败：'+j.message);
-      if(j.ok){ alert('存储分区创建成功！\n\n'+j.message); }
-      else { alert('创建失败：\n\n'+j.message); }
+      if(!j.ok){ alert('预览失败：\n\n'+j.message); return; }
+      var msg = j.message || '';
+      var isSmall = msg.indexOf('预留') >= 0 || msg.indexOf('仅') >= 0;
+      var confirmMsg = '确认在 eMMC 末尾新建 storage 分区？\n\n将使用 sgdisk 新建分区、mkfs.ext4 格式化并自动挂载。\n\n此操作会修改 GPT 分区表，请确保已备份！';
+      if(isSmall){
+        confirmMsg = '⚠️ 检测到可用空间较小！\n\n' + msg + '\n\n仍然要新建分区吗？\n\n此操作会修改 GPT 分区表，请确保已备份！';
+      }
+      if(!confirm(confirmMsg)) return;
+      log('正在新建 eMMC 存储分区...');
+      fetch(API_BASE+'/alloc_storage?action=create',{credentials:'same-origin'})
+        .then(function(r){return r.json()})
+        .then(function(j2){
+          log(j2.ok ? '✅ '+j2.message : '❌ 失败：'+j2.message);
+          if(j2.ok){ alert('存储分区创建成功！\n\n'+j2.message); }
+          else { alert('创建失败：\n\n'+j2.message); }
+        })
+        .catch(function(e){log('❌ 请求失败：'+e); alert('请求失败：'+e);});
     })
-    .catch(function(e){log('❌ 请求失败：'+e); alert('请求失败：'+e);});
+    .catch(function(e){log('❌ 预览请求失败：'+e);});
 }
 
 function chooseWrite(part) {

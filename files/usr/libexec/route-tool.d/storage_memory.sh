@@ -138,51 +138,58 @@ get_cache_dir() {
 }
 
 # Download memtester binary if not found
+# Priority: opkg install → gwrt.uk → GitHub (fallback)
 # - Binary > 100KB → cache to eMMC hidden dir or /tmp
 # - Binary <= 100KB → opkg install (small enough for system)
 download_memtester() {
     local ARCH="$(uname -m)"
-    local MEMTESTER_URL="https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download/memtester_${ARCH}"
+    local GWRT_URL="https://gwrt.uk/wp-content/uploads/route-tool/memtester_${ARCH}"
+    local GITHUB_URL="https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download/memtester_${ARCH}"
     local cache_dir="$(get_cache_dir)"
     local dest=""
 
-    echo "正在下载 memtester (${ARCH})..."
-    mkdir -p "$cache_dir" 2>/dev/null
-    dest="$cache_dir/memtester"
-
-    # Try download
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --connect-timeout 15 --max-time 120 "$MEMTESTER_URL" -o "$dest" 2>/dev/null
-    elif command -v wget >/dev/null 2>&1; then
-        wget -q --timeout=15 "$MEMTESTER_URL" -O "$dest" 2>/dev/null
-    else
-        echo "ERROR=no_download_tool"
-        return 1
-    fi
-
-    if [ ! -s "$dest" ]; then
-        rm -f "$dest"
-        # Fallback: try opkg
-        echo "下载失败，尝试 opkg 安装..."
-        opkg update >/dev/null 2>&1
-        if opkg install memtester >/dev/null 2>&1; then
+    # Priority 1: opkg install (most reliable, proper package management)
+    echo "尝试 opkg 安装 memtester..."
+    opkg update >/dev/null 2>&1
+    if opkg install memtester >/dev/null 2>&1; then
+        # Verify opkg-installed binary
+        if command -v memtester >/dev/null 2>&1; then
             echo "OK=opkg"
             return 0
         fi
-        echo "ERROR=download_and_opkg_failed"
-        return 1
     fi
+    echo "opkg 安装失败，尝试下载..."
 
-    chmod 755 "$dest"
-    # Verify it runs
-    if "$dest" --help >/dev/null 2>&1 || [ -x "$dest" ]; then
-        echo "OK=$dest"
-        return 0
-    else
+    # Priority 2: download from gwrt.uk (China-friendly, no GFW issues)
+    # Priority 3: fallback to GitHub
+    mkdir -p "$cache_dir" 2>/dev/null
+    dest="$cache_dir/memtester"
+
+    for url in "$GWRT_URL" "$GITHUB_URL"; do
+        echo "正在下载 memtester (${ARCH}) 从 $(echo $url | sed 's|.*//||' | cut -d/ -f1)..."
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL --connect-timeout 15 --max-time 120 "$url" -o "$dest" 2>/dev/null
+        elif command -v wget >/dev/null 2>&1; then
+            wget -q --timeout=15 "$url" -O "$dest" 2>/dev/null
+        else
+            echo "ERROR=no_download_tool"
+            return 1
+        fi
+
+        if [ -s "$dest" ]; then
+            chmod 755 "$dest"
+            # Verify it runs
+            if "$dest" --help >/dev/null 2>&1 || [ -x "$dest" ]; then
+                echo "OK=$dest"
+                return 0
+            fi
+        fi
         rm -f "$dest"
-        echo "ERROR=bad_binary"
-        return 1
-    fi
+        echo "从 $(echo $url | sed 's|.*//||' | cut -d/ -f1) 下载失败，尝试下一个源..."
+    done
+
+    echo "ERROR=all_sources_failed"
+    return 1
 }
 
 choose_target_mb() {
