@@ -722,22 +722,26 @@ function updatePortsFromKV(d) {
 }
 
 function updateNandFromKV(d) {
-  if (!hasAny(d, ['NAND_DONE', 'NAND_HEALTH', 'NAND_MTD_COUNT', 'NAND_DETAIL_COUNT'])) return;
+  if (!hasAny(d, ['NAND_DONE', 'NAND_HEALTH', 'NAND_MTD_COUNT', 'NAND_DETAIL_COUNT', 'NAND_BAD_BLOCKS_TOTAL'])) return;
   var val = qs('#nand-val');
   var box = qs('#nand-kv');
   var det = qs('#nand-detect');
+  var bad = parseInt(d.NAND_BAD_BLOCKS_TOTAL || '0', 10) || 0;
+  var health = String(d.NAND_HEALTH || 'N/A');
+  var warn = health.indexOf('WARN') === 0 || bad > 0;
   if (det) {
     det.textContent = d.NAND_MTD_FOUND === '1' ? '已检测' : '未检测';
     det.className = 'rt-badge ' + (d.NAND_MTD_FOUND === '1' ? 'rt-badge-ok' : '');
   }
   if (val) {
-    val.textContent = d.NAND_HEALTH || 'N/A';
-    val.className = 'rt-val ' + (String(d.NAND_HEALTH || '').indexOf('WARN') === 0 ? 'warnc' : 'good');
+    val.textContent = d.NAND_MTD_FOUND === '1' ? (bad + ' 坏块') : 'N/A';
+    val.className = 'rt-val ' + (warn ? 'warnc' : 'good');
   }
   if (box) {
     box.innerHTML =
       '<div class="rt-k">MTD数量</div><div>' + esc(d.NAND_MTD_COUNT || d.NAND_DETAIL_COUNT || '-') + '</div>' +
-      '<div class="rt-k">健康状态</div><div>' + esc(d.NAND_HEALTH || '-') + '</div>' +
+      '<div class="rt-k">坏块总数</div><div>' + esc(d.NAND_BAD_BLOCKS_TOTAL || '0') + (d.NAND_BAD_BLOCKS_DETAIL ? ' <span class="rt-small">' + esc(d.NAND_BAD_BLOCKS_DETAIL) + '</span>' : '') + '</div>' +
+      '<div class="rt-k">健康状态</div><div>' + esc(health) + '</div>' +
       '<div class="rt-k">UBI</div><div>' + esc(d.NAND_UBI_DEVICES || 'N/A') + '</div>';
   }
 }

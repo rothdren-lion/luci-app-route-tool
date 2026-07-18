@@ -36,6 +36,8 @@ fi
 PART_NUM=0
 HAS_ECC_ERR=0
 HAS_CORRECTED=0
+BAD_TOTAL=0
+BAD_DETAIL=""
 for mtd in /sys/class/mtd/mtd*; do
     [ -d "$mtd" ] || continue
     base="${mtd##*/}"
@@ -58,6 +60,17 @@ for mtd in /sys/class/mtd/mtd*; do
         SIZE_MB=$((DEV_SIZE / 1024 / 1024))
         echo "NAND_${PART_NUM}=${DEV_NAME}:${SIZE_MB}MB:${BAD_BLKS}bad:ECC${ECC_F}"
 
+        case "$BAD_BLKS" in
+            ''|*[!0-9]*) ;;
+            *)
+                BAD_TOTAL=$((BAD_TOTAL + BAD_BLKS))
+                if [ "$BAD_BLKS" -gt 0 ]; then
+                    item="${base}:${DEV_NAME}:${BAD_BLKS}"
+                    [ -n "$BAD_DETAIL" ] && BAD_DETAIL="${BAD_DETAIL},${item}" || BAD_DETAIL="$item"
+                fi
+                ;;
+        esac
+
         if [ "$ECC_F" != "?" ] && [ "$ECC_F" != "0" ]; then
             HAS_ECC_ERR=1
             echo "NAND_${PART_NUM}_ECC=FAIL(${ECC_F})"
@@ -70,6 +83,8 @@ for mtd in /sys/class/mtd/mtd*; do
     fi
 done
 echo "NAND_DETAIL_COUNT=${PART_NUM}"
+echo "NAND_BAD_BLOCKS_TOTAL=${BAD_TOTAL}"
+[ -n "$BAD_DETAIL" ] && echo "NAND_BAD_BLOCKS_DETAIL=${BAD_DETAIL}"
 
 # UBI check
 if command -v ubinfo >/dev/null 2>&1; then
@@ -89,8 +104,10 @@ if [ "$HAS_ECC_ERR" -eq 1 ]; then
     echo "NAND_HEALTH=WARN - ECC错误"
 elif [ "$HAS_CORRECTED" -eq 1 ]; then
     echo "NAND_HEALTH=WARN - 有已纠正错误"
+elif [ "$BAD_TOTAL" -gt 0 ]; then
+    echo "NAND_HEALTH=WARN - 坏块${BAD_TOTAL}个"
 elif [ "$MTD_FOUND" -eq 1 ]; then
-    echo "NAND_HEALTH=OK"
+    echo "NAND_HEALTH=OK - 0坏块"
 else
     echo "NAND_HEALTH=N/A"
 fi
