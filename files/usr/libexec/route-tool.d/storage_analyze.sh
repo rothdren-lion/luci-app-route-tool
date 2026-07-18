@@ -42,8 +42,12 @@ if [ -n "$MMC_DEV" ]; then
 fi
 
 # Block device
-for blk in /sys/block/mmcblk*; do
-    [ -d "$blk" ] && [ ! "${blk##*/}" = "mmcblk0" ] && continue
+BLK_DEV=""
+for blk in "$MMC_DEV"/block/mmcblk* /sys/block/mmcblk*; do
+    [ -r "$blk/size" ] || continue
+    if [ -r "$blk/device/type" ] && [ "$(cat "$blk/device/type" 2>/dev/null)" != "MMC" ]; then
+        continue
+    fi
     BLK_DEV="${blk##*/}"
     SIZE_SECTORS=$(cat "$blk/size" 2>/dev/null)
     if [ -n "$SIZE_SECTORS" ]; then
@@ -56,8 +60,8 @@ for blk in /sys/block/mmcblk*; do
 done
 
 # RPMB
-if [ -e /dev/mmcblk0rpmb ]; then
-    RPMB_SIZE=$(cat /sys/class/mmc_host/mmc0/mmc0:0001/rpmb_size 2>/dev/null)
+if [ -n "$BLK_DEV" ] && [ -e "/dev/${BLK_DEV}rpmb" ]; then
+    RPMB_SIZE=$(cat "$MMC_DEV/rpmb_size" 2>/dev/null)
     [ -n "$RPMB_SIZE" ] && echo "  RPMB: ${RPMB_SIZE}KB"
 fi
 
@@ -187,16 +191,18 @@ echo ""
 
 # ── 6. Boot Partitions ────────────────────────────────
 echo "─── 🔒 启动分区 ───"
-for boot in /dev/mmcblk0boot0 /dev/mmcblk0boot1; do
-    if [ -e "$boot" ]; then
-        # Use the current loop item; boot1 must not inherit boot0's size.
-        SIZE=$(cat /sys/block/${boot##*/}/size 2>/dev/null)
-        if [ -n "$SIZE" ]; then
-            SIZE_KB=$((SIZE * 512 / 1024))
-            echo "  $boot: ${SIZE_KB}KB"
+if [ -n "$BLK_DEV" ]; then
+    for boot in /dev/${BLK_DEV}boot0 /dev/${BLK_DEV}boot1; do
+        if [ -e "$boot" ]; then
+            # Use the current loop item; boot1 must not inherit boot0's size.
+            SIZE=$(cat /sys/block/${boot##*/}/size 2>/dev/null)
+            if [ -n "$SIZE" ]; then
+                SIZE_KB=$((SIZE * 512 / 1024))
+                echo "  $boot: ${SIZE_KB}KB"
+            fi
         fi
-    fi
-done
+    done
+fi
 echo ""
 
 # ── 7. System Memory ──────────────────────────────────

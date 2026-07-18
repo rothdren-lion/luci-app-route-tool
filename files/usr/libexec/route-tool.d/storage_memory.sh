@@ -1,5 +1,5 @@
-# by 数码罗记 · godsun.pro
 #!/bin/sh
+# by 数码罗记 · godsun.pro
 # Memory Pressure Test + Capacity Test (memtester)
 # Usage: storage_memory.sh [mode:info|quick|standard|full|stress|burnin|capacity] [size_MB] [duration_sec]
 #
@@ -62,14 +62,21 @@ calc_speed() {
     awk -v b="$bytes" -v d="$delta" 'BEGIN { if (d<=0) d=1; printf "%.1f", (b * 10000) / (1048576 * d) }'
 }
 
+find_emmc_dev() {
+    for sysdev in /sys/block/mmcblk*; do
+        [ -r "$sysdev/device/type" ] || continue
+        [ "$(cat "$sysdev/device/type" 2>/dev/null)" = "MMC" ] || continue
+        dev="/dev/${sysdev##*/}"
+        [ -b "$dev" ] && { echo "$dev"; return 0; }
+    done
+    return 1
+}
+
 find_memtester() {
     # Search order: eMMC cache > bundled > /tmp > system PATH
     # eMMC devices use hidden cache dir on the largest partition
     # NAND/other devices use /tmp (ephemeral)
-    local emmc_dev=""
-    for d in /dev/mmcblk0 /dev/mmcblk1; do
-        [ -b "$d" ] && { emmc_dev="$d"; break; }
-    done
+    local emmc_dev="$(find_emmc_dev 2>/dev/null)"
 
     # Check eMMC hidden cache first
     if [ -n "$emmc_dev" ]; then
@@ -111,13 +118,10 @@ find_memtester() {
 }
 
 # Get cache directory for downloadable binaries
-# eMMC → /mnt/mmcblk0pN/.route-tool/bin/ (persistent, hidden)
+# eMMC → /mnt/mmcblkXpN/.route-tool/bin/ (persistent, hidden)
 # NAND  → /tmp (ephemeral, no big eMMC partition to waste)
 get_cache_dir() {
-    local emmc_dev=""
-    for d in /dev/mmcblk0 /dev/mmcblk1; do
-        [ -b "$d" ] && { emmc_dev="$d"; break; }
-    done
+    local emmc_dev="$(find_emmc_dev 2>/dev/null)"
 
     if [ -n "$emmc_dev" ]; then
         local base="$(basename "$emmc_dev")"
@@ -150,11 +154,15 @@ download_memtester() {
 
     # Priority 1: opkg install (most reliable, proper package management)
     echo "尝试 opkg 安装 memtester..."
-    opkg update >/dev/null 2>&1
-    if opkg install memtester >/dev/null 2>&1; then
+    if command -v opkg >/dev/null 2>&1; then
+        opkg update >/dev/null 2>&1
+    else
+        echo "未找到 opkg，跳过包管理器安装。"
+    fi
+    if command -v opkg >/dev/null 2>&1 && opkg install memtester >/dev/null 2>&1; then
         # Verify opkg-installed binary
         if command -v memtester >/dev/null 2>&1; then
-            echo "OK=opkg"
+            echo "OK=$(command -v memtester 2>/dev/null)"
             return 0
         fi
     fi
@@ -272,14 +280,15 @@ if [ "$MODE" = "capacity" ]; then
         # Auto-download memtester
         echo "MEM_CAPACITY_NOTE=未找到 memtester，正在自动下载..."
         DL_RESULT=$(download_memtester 2>&1)
-        case "$DL_RESULT" in
-            OK=*)
-                MEMTESTER_BIN="${DL_RESULT#OK=}"
-                echo "MEM_CAPACITY_DOWNLOAD=${MEMTESTER_BIN}"
-                ;;
-            *)
+        printf '%s\n' "$DL_RESULT" | sed 's/^/MEM_CAPACITY_DOWNLOAD_LOG=/'
+        MEMTESTER_BIN="$(printf '%s\n' "$DL_RESULT" | sed -n 's/^OK=//p' | tail -n 1)"
+        if [ -n "$MEMTESTER_BIN" ]; then
+            echo "MEM_CAPACITY_DOWNLOAD=${MEMTESTER_BIN}"
+        else
+            DL_ERROR="$(printf '%s\n' "$DL_RESULT" | sed -n 's/^ERROR=//p' | tail -n 1)"
+            [ -n "$DL_ERROR" ] || DL_ERROR="all_sources_failed"
                 echo "MEM_CAPACITY_STATUS=NO_MEMTESTER"
-                echo "MEM_CAPACITY_NOTE=memtester 下载失败：${DL_RESULT#ERROR=}，回退到 tmpfs 压力测试"
+                echo "MEM_CAPACITY_NOTE=memtester 下载失败：${DL_ERROR}，回退到 tmpfs 压力测试"
                 echo "MEM_CAPACITY_FALLBACK=tmpfs_pressure"
                 # Fallback: run standard tmpfs pressure instead
                 echo ""
@@ -340,8 +349,7 @@ if [ "$MODE" = "capacity" ]; then
                 fi
                 echo "MEM_TEST_DONE=1"
                 exit 0
-                ;;
-        esac
+        fi
     fi
 
     # memtester found — calculate safe test size
@@ -363,7 +371,12 @@ if [ "$MODE" = "capacity" ]; then
     echo "MEM_CAPACITY_TOTAL_MB=${TOTAL_MB}"
     echo "MEM_CAPACITY_AVAIL_MB=${FREE_MB}"
     echo "MEM_CAPACITY_RESERVE_MB=${SAFE_RESERVE_MB}"
-    echo "MEM_CAPACITY_COVERAGE=$((TEST_MB * 100 / TOTAL_MB))"
+    if [ "$TOTAL_MB" -gt 0 ]; then
+        MEM_COVERAGE=$((TEST_MB * 100 / TOTAL_MB))
+    else
+        MEM_COVERAGE=0
+    fi
+    echo "MEM_CAPACITY_COVERAGE=${MEM_COVERAGE}"
     echo "MEM_PHASE=memtester_run"
     echo "MEM_CAPACITY_NOTE=memtester 使用 malloc 申请内存，不会触发 OOM，测完自动释放"
 
@@ -395,7 +408,7 @@ if [ "$MODE" = "capacity" ]; then
         echo "MEM_CAPACITY_STATUS=PASS"
         echo "MEM_PRESSURE_VERDICT=PASS"
         echo "MEM_VERDICT=PASS"
-        echo "MEM_RESULT_TEXT=✅ 内存完整性通过：${TEST_MB}MB 全部 ${OK_COUNT} 项测试 OK（覆盖率 ${TEST_MB}*100/${TOTAL_MB}）"
+        echo "MEM_RESULT_TEXT=✅ 内存完整性通过：${TEST_MB}MB 全部 ${OK_COUNT} 项测试 OK（覆盖率 ${MEM_COVERAGE}%）"
     else
         echo "MEM_CAPACITY_STATUS=FAIL"
         echo "MEM_PRESSURE_VERDICT=FAIL"

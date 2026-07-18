@@ -14,7 +14,7 @@ function index()
     entry({"admin", "system", "route_tool", "write_status"}, call("write_status"), nil).leaf = true
 end
 
-local CURRENT_VERSION = "0.3.23-1"
+local CURRENT_VERSION = "0.3.24-1"
 local UPDATE_BASE_URL = "https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download"
 local UPDATE_VERSION_URL = UPDATE_BASE_URL .. "/VERSION"
 local UPDATE_IPK_URL = UPDATE_BASE_URL .. "/luci-app-route-tool_all.ipk"
@@ -45,6 +45,20 @@ end
 local function upload_tmp_path(prefix)
     local nixio = require "nixio"
     return "/tmp/" .. (prefix or "route-tool-upload") .. "-" .. tostring(os.time()) .. "-" .. tostring(nixio.getpid()) .. ".bin"
+end
+
+local function job_id(kind)
+    local nixio = require "nixio"
+    return "route-tool-" .. (kind or "job") .. "-" .. tostring(os.time()) .. "-" .. tostring(nixio.getpid())
+end
+
+local function safe_job_id(id)
+    return type(id) == "string" and id:match("^route%-tool%-[%w%-]+%-%d+%-%d+$") ~= nil
+end
+
+local function job_tmp_path(id, suffix)
+    if not safe_job_id(id) then return nil end
+    return "/tmp/" .. id .. (suffix or "")
 end
 
 local function safe_tmp_path(path)
@@ -125,19 +139,36 @@ function write()
 
     -- Write runs in background to avoid uhttpd CGI timeout (dd on large partitions can take minutes).
     -- Frontend polls /write_status for the result.
-    local status_file = "/tmp/route-tool-write-status.txt"
+    local status_id = job_id("write")
+    local status_file = job_tmp_path(status_id, ".txt")
+    if not status_file then
+        os.remove(tmp)
+        luci.http.write_json({ ok = false, message = "写入任务状态路径不安全，已取消。" })
+        return
+    end
     os.remove(status_file)
     sys.exec(string.format(
-        "( /usr/libexec/route-tool write %s %s YES >%s 2>&1; echo \"RC=$?\" >>%s ) &",
-        shellquote(part), shellquote(tmp), status_file, status_file
+        "( /usr/libexec/route-tool write %s %s YES >%s 2>&1; rc=$?; rm -f %s; echo \"RC=$rc\" >>%s ) &",
+        shellquote(part), shellquote(tmp), shellquote(status_file), shellquote(tmp), shellquote(status_file)
     ))
-    luci.http.write_json({ ok = true, message = "正在后台写入 " .. part .. "，请等待...", async = true })
+    luci.http.write_json({ ok = true, message = "正在后台写入 " .. part .. "，请等待...", async = true, status_id = status_id })
 end
 
 function write_status()
     local fs = require "nixio.fs"
     luci.http.prepare_content("application/json")
-    local status_file = "/tmp/route-tool-write-status.txt"
+    local status_id = luci.http.formvalue("id") or ""
+    local status_file = ""
+    if status_id == "" then
+        -- Backward-compatible fallback for older frontends during an in-place upgrade.
+        status_file = "/tmp/route-tool-write-status.txt"
+    else
+        status_file = job_tmp_path(status_id, ".txt")
+        if not status_file then
+            luci.http.write_json({ running = false, ok = false, message = "写入任务 ID 不合法。" })
+            return
+        end
+    end
     local content = fs.readfile(status_file) or ""
     if content == "" then
         luci.http.write_json({ running = true, message = "正在写入，请稍候..." })
@@ -206,19 +237,30 @@ function update()
             luci.http.write_json({ ok = false, current = CURRENT_VERSION, message = "下载更新包失败。" .. (msg ~= "" and ("\n" .. msg) or "") })
             return
         end
-        -- Try opkg first; if it fails with "Malformed package file" (BusyBox missing ar applet),
-        -- fall back to manual tar-based extraction.
-        local out = sys.exec("opkg install --force-reinstall " .. shellquote(tmp) .. " 2>&1")
-        if out:match("Malformed package file") then
-            -- Fallback: extract ipk manually (ar archive = debian-binary + control.tar.gz + data.tar.gz)
+        -- Try opkg first; if it fails with the known ar/ipk parser issue, attempt manual extraction.
+        local install_log = "/tmp/route-tool-update-install-opkg.log"
+        os.remove(install_log)
+        local install_rc = sys.call("opkg install --force-reinstall " .. shellquote(tmp) .. " >" .. shellquote(install_log) .. " 2>&1")
+        local out = fs.readfile(install_log) or ""
+        if install_rc ~= 0 and out:match("Malformed package file") then
+            local fallback_log = "/tmp/route-tool-update-install-fallback.log"
+            os.remove(fallback_log)
             local fallback = "cd /tmp && " ..
-                "tar -xzf " .. shellquote(tmp) .. " 2>/dev/null && " ..
+                "rm -f debian-binary control.tar.gz data.tar.gz && " ..
+                "(command -v ar >/dev/null 2>&1 && ar x " .. shellquote(tmp) .. " || tar -xzf " .. shellquote(tmp) .. " 2>/dev/null) && " ..
+                "[ -s data.tar.gz ] && [ -s control.tar.gz ] && " ..
                 "tar -xzf data.tar.gz -C / && " ..
                 "mkdir -p /usr/lib/opkg/info && " ..
                 "tar -xzf control.tar.gz -C /usr/lib/opkg/info/ && " ..
                 "rm -f debian-binary control.tar.gz data.tar.gz && " ..
-                "echo 'Manual install completed (opkg ar fallback).'"
-            out = sys.exec(fallback .. " 2>&1")
+                "echo 'Manual install completed (ipk extraction fallback).'"
+            install_rc = sys.call(fallback .. " >" .. shellquote(fallback_log) .. " 2>&1")
+            out = fs.readfile(fallback_log) or ""
+        end
+        os.remove(tmp)
+        if install_rc ~= 0 then
+            luci.http.write_json({ ok = false, current = CURRENT_VERSION, message = "安装更新包失败。" .. (out ~= "" and ("\n" .. out) or "") })
+            return
         end
         sys.call("rm -rf /tmp/luci-indexcache /tmp/luci-modulecache/* /tmp/luci-* 2>/dev/null || true")
         sys.call("/etc/init.d/rpcd restart >/dev/null 2>&1 || true")

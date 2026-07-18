@@ -422,7 +422,7 @@ function doWrite(part, input){
   fetch(API_BASE + '/write', {method:'POST', body:fd, credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){
     if(j.async){
       log('⏳ '+j.message);
-      pollWriteStatus(part, input);
+      pollWriteStatus(part, input, j.status_id || '');
     } else {
       log((j.ok?'✅ 完成：':'❌ 失败：')+(j.message||''));
       if(!j.ok){ alert('写入 '+part+' 失败：\n\n'+(j.message||'未知错误')); }
@@ -430,12 +430,13 @@ function doWrite(part, input){
     }
   }).catch(function(e){log('❌ 请求失败：'+e); alert('请求失败：'+e); input.value='';});
 }
-function pollWriteStatus(part, input){
+function pollWriteStatus(part, input, statusId){
   setTimeout(function(){
-    fetch(API_BASE + '/write_status', {credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){
+    var url = API_BASE + '/write_status' + (statusId ? ('?id=' + encodeURIComponent(statusId)) : '');
+    fetch(url, {credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){
       if(j.running){
         log('⏳ '+(j.message||'正在写入...'));
-        pollWriteStatus(part, input);
+        pollWriteStatus(part, input, statusId);
       } else {
         log((j.ok?'✅ 完成：':'❌ 失败：')+(j.message||''));
         if(j.ok){ alert('写入 '+part+' 完成！\n\n'+(j.message||'')); }
@@ -444,7 +445,7 @@ function pollWriteStatus(part, input){
       }
     }).catch(function(e){
       log('❌ 轮询失败：'+e+'，3秒后重试...');
-      pollWriteStatus(part, input);
+      pollWriteStatus(part, input, statusId);
     });
   }, 3000);
 }
