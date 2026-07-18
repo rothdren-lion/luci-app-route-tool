@@ -15,9 +15,7 @@ function index()
 end
 
 local CURRENT_VERSION = "0.3.24-1"
-local UPDATE_BASE_URL = "https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download"
-local UPDATE_VERSION_URL = UPDATE_BASE_URL .. "/VERSION"
-local UPDATE_IPK_URL = UPDATE_BASE_URL .. "/luci-app-route-tool_all.ipk"
+local UPDATE_RELEASE_API_URL = "https://api.github.com/repos/rothdren-lion/luci-app-route-tool/releases/latest"
 
 local function allowed_part(p)
     return p == "gpt" or p == "cdt" or p == "art" or p == "ART" or p == "appsbl" or p == "factory" or p == "mibib" or p == "bl2" or p == "BL2" or p == "fip" or p == "FIP" or p == "config" or p == "Config" or p == "u-boot" or p == "uboot"
@@ -200,8 +198,81 @@ local function trim(s)
     return tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function version_key(v)
+    v = trim(v):gsub("^v", "")
+    local main, rel = v:match("^(.-)%-(%d+)$")
+    if not main then
+        main = v
+        rel = "0"
+    end
+    local parts = {}
+    for n in main:gmatch("%d+") do
+        parts[#parts + 1] = tonumber(n) or 0
+    end
+    return parts, tonumber(rel) or 0
+end
+
+local function version_compare(a, b)
+    local ap, ar = version_key(a)
+    local bp, br = version_key(b)
+    local max = math.max(#ap, #bp)
+    for i = 1, max do
+        local x = ap[i] or 0
+        local y = bp[i] or 0
+        if x < y then return -1 end
+        if x > y then return 1 end
+    end
+    if ar < br then return -1 end
+    if ar > br then return 1 end
+    return 0
+end
+
 local function update_fetch_cmd(url, out)
     return "(command -v curl >/dev/null 2>&1 && curl -fsSL --connect-timeout 12 --max-time 60 " .. shellquote(url) .. " -o " .. shellquote(out) .. ") || (command -v wget >/dev/null 2>&1 && wget -q -T 60 -O " .. shellquote(out) .. " " .. shellquote(url) .. ")"
+end
+
+local function fetch_latest_release()
+    local sys = require "luci.sys"
+    local fs = require "nixio.fs"
+    local jsonc = require "luci.jsonc"
+    local tmp = "/tmp/route-tool-release-meta.json"
+    os.remove(tmp)
+    local rc = sys.call(update_fetch_cmd(UPDATE_RELEASE_API_URL, tmp) .. " >/tmp/route-tool-release-check.log 2>&1")
+    local raw = trim(fs.readfile(tmp) or "")
+    os.remove(tmp)
+    if rc ~= 0 or raw == "" then
+        local msg = sys.exec("tail -n 8 /tmp/route-tool-release-check.log 2>/dev/null")
+        return nil, "检查更新失败。" .. (msg ~= "" and ("\n" .. msg) or "")
+    end
+    local meta = jsonc.parse(raw)
+    if type(meta) ~= "table" then
+        return nil, "更新信息解析失败。"
+    end
+    local latest_tag = trim(meta.tag_name or "")
+    local latest_version = latest_tag:gsub("^v", "")
+    local ipk_url = ""
+    local assets = meta.assets or {}
+    if type(assets) == "table" then
+        for _, asset in ipairs(assets) do
+            local name = tostring(asset.name or "")
+            local url = tostring(asset.browser_download_url or "")
+            if url ~= "" and name:match("%.ipk$") then
+                ipk_url = url
+                local asset_version = name:match("^luci%-app%-route%-tool_(.+)_.+%.ipk$")
+                if asset_version and asset_version ~= "" then
+                    latest_version = asset_version
+                end
+                break
+            end
+        end
+    end
+    if ipk_url == "" then
+        return nil, "最新 release 未找到 ipk 资产。"
+    end
+    if latest_version == "" then
+        latest_version = latest_tag
+    end
+    return { tag = latest_tag, version = latest_version, ipk_url = ipk_url }, nil
 end
 
 function update()
@@ -211,17 +282,19 @@ function update()
     luci.http.prepare_content("application/json")
 
     if action == "check" then
-        local tmp = "/tmp/route-tool-latest-version.txt"
-        os.remove(tmp)
-        local rc = sys.call(update_fetch_cmd(UPDATE_VERSION_URL, tmp) .. " >/tmp/route-tool-update-check.log 2>&1")
-        local latest = trim(fs.readfile(tmp) or "")
-        os.remove(tmp)
-        if rc ~= 0 or latest == "" then
-            local msg = sys.exec("tail -n 5 /tmp/route-tool-update-check.log 2>/dev/null")
-            luci.http.write_json({ ok = false, current = CURRENT_VERSION, message = "检查更新失败。" .. (msg ~= "" and ("\n" .. msg) or "") })
+        local release, err = fetch_latest_release()
+        if not release then
+            luci.http.write_json({ ok = false, current = CURRENT_VERSION, message = err or "检查更新失败。" })
             return
         end
-        luci.http.write_json({ ok = true, current = CURRENT_VERSION, latest = latest, update_available = (latest ~= CURRENT_VERSION), ipk_url = UPDATE_IPK_URL })
+        luci.http.write_json({
+            ok = true,
+            current = CURRENT_VERSION,
+            latest = release.version,
+            release_tag = release.tag,
+            update_available = (version_compare(release.version, CURRENT_VERSION) > 0),
+            ipk_url = release.ipk_url
+        })
         return
     elseif action == "install" then
         local confirm = luci.http.formvalue("confirm") or ""
@@ -229,9 +302,18 @@ function update()
             luci.http.write_json({ ok = false, current = CURRENT_VERSION, message = "缺少确认参数，已取消在线更新。" })
             return
         end
+        local release, err = fetch_latest_release()
+        if not release then
+            luci.http.write_json({ ok = false, current = CURRENT_VERSION, message = err or "下载更新包失败。" })
+            return
+        end
+        if version_compare(release.version, CURRENT_VERSION) <= 0 then
+            luci.http.write_json({ ok = false, current = CURRENT_VERSION, latest = release.version, message = "当前已是最新版本，无需在线更新。" })
+            return
+        end
         local tmp = "/tmp/luci-app-route-tool-ota.ipk"
         os.remove(tmp)
-        local rc = sys.call(update_fetch_cmd(UPDATE_IPK_URL, tmp) .. " >/tmp/route-tool-update-install.log 2>&1")
+        local rc = sys.call(update_fetch_cmd(release.ipk_url, tmp) .. " >/tmp/route-tool-update-install.log 2>&1")
         if rc ~= 0 or not fs.access(tmp) then
             local msg = sys.exec("tail -n 8 /tmp/route-tool-update-install.log 2>/dev/null")
             luci.http.write_json({ ok = false, current = CURRENT_VERSION, message = "下载更新包失败。" .. (msg ~= "" and ("\n" .. msg) or "") })
