@@ -37,6 +37,16 @@ PART_NUM=0
 HAS_ECC_ERR=0
 HAS_CORRECTED=0
 for mtd in /sys/class/mtd/mtd*; do
+    [ -d "$mtd" ] || continue
+    base="${mtd##*/}"
+    case "$base" in
+        mtd[0-9]*) ;;
+        *) continue ;;
+    esac
+    case "${base#mtd}" in
+        ''|*[!0-9]*) continue ;;
+    esac
+
     if [ -d "$mtd" ]; then
         DEV_NAME=$(cat "$mtd/name" 2>/dev/null || echo "?")
         DEV_SIZE=$(cat "$mtd/size" 2>/dev/null || echo "0")
