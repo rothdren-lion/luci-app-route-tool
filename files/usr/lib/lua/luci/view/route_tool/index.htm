@@ -77,6 +77,18 @@
     <input id="mem-size" type="number" min="16" placeholder="自定义MB" style="width:80px;padding:6px 10px;border-radius:20px;border:1px solid #ddd;font-size:13px">
     <button class="rt-tab rt-gray" onclick="runHealth('bootlog',this)">开机日志</button>
     <button class="rt-tab rt-purple" onclick="runHealth('analyze',this)">完整分析</button>
+    <span style="display:inline-block;width:1px;height:20px;background:#ccc;margin:0 4px;vertical-align:middle"></span>
+    <button class="rt-tab rt-blue" onclick="runNetSpeed('quick',this)">🌐 网速测试</button>
+    <select id="net-mode" style="padding:6px 10px;border-radius:20px;border:1px solid #ddd;font-weight:700;font-size:13px">
+      <option value="quick">快速体检</option>
+      <option value="ping">Ping延迟</option>
+      <option value="download">下载测速</option>
+      <option value="upload">上传测速</option>
+      <option value="ipv6">IPv6检测</option>
+      <option value="nat">NAT类型</option>
+      <option value="upstream">上游延迟</option>
+      <option value="full">完整网测</option>
+    </select>
   </div>
 
   <div class="rt-health-grid" id="dashboard">
@@ -88,6 +100,7 @@
     <div class="rt-card"><div class="rt-title">🧠 内存检测 <span class="rt-badge" style="background:#fff3cd;border-color:#ffc107;color:#856404">下拉选择模式</span></div><div class="rt-val" id="mem-val" style="font-size:20px">--</div><div class="rt-meta" id="mem-sub">下拉选模式，点"内存测试"按钮执行；选"完整性"需先上传 memtester 到 /tmp/</div></div>
     <div class="rt-card"><div class="rt-title">💾 NAND <span class="rt-badge" id="nand-detect">检测中</span></div><div class="rt-val" id="nand-val">--</div><div class="rt-meta rt-kv" id="nand-kv"></div></div>
     <div class="rt-card"><div class="rt-title">📜 开机日志</div><div class="rt-val" id="bootlog-val">--</div><div class="rt-meta" id="bootlog-sub">点击“开机日志”查看中文解释</div></div>
+    <div class="rt-card"><div class="rt-title">🌐 网络测速 <span class="rt-badge" style="background:#e8f1ff;border-color:#9ec5fe;color:#084298">下拉选模式</span></div><div class="rt-val" id="net-val" style="font-size:20px">--</div><div class="rt-meta" id="net-sub">下拉选模式，点“网速测试”按钮执行</div><div class="rt-meta rt-kv" id="net-kv"></div></div>
   </div>
 
   <details id="log-wrap" class="rt-log-wrap">
@@ -767,6 +780,148 @@ function updateDashFromKV(d){
   updatePortsFromKV(d);
   updateNandFromKV(d);
   updateBootlogFromKV(d);
+  updateNetFromKV(d);
+}
+// ── Network Speed Test ──
+var netPollTimer = null;
+
+function updateNetFromKV(d) {
+  if (!hasAny(d, ['NET_TEST', 'NET_QUICK_DONE', 'NET_FULL_DONE', 'DL_DONE', 'UL_DONE', 'IPV6_DONE', 'NAT_DONE', 'UPSTREAM_DONE', 'PING_DONE'])) return;
+  var nv = qs('#net-val');
+  var ns = qs('#net-sub');
+  var nk = qs('#net-kv');
+  if (!nv) return;
+
+  var html = '';
+  var verdict = '';
+  var verdictClass = '';
+
+  // Quick test results
+  if (d.NET_PUBLIC_IP) html += '<div class="rt-k">公网IP</div><div>' + esc(d.NET_PUBLIC_IP) + '</div>';
+  if (d.NET_PING_223) html += '<div class="rt-k">Ping(223)</div><div>' + esc(d.NET_PING_223) + '</div>';
+  if (d.NET_PING_8888) html += '<div class="rt-k">Ping(8.8)</div><div>' + esc(d.NET_PING_8888) + '</div>';
+  if (d.NET_DL_QUICK) html += '<div class="rt-k">下载</div><div>' + esc(d.NET_DL_QUICK) + '</div>';
+  if (d.NET_IPV6) html += '<div class="rt-k">IPv6</div><div>' + esc(d.NET_IPV6) + '</div>';
+  if (d.NET_NAT) html += '<div class="rt-k">NAT</div><div>' + esc(d.NET_NAT) + '</div>';
+
+  // Ping results
+  if (d.PING_AVG) html += '<div class="rt-k">Ping平均</div><div>' + esc(d.PING_AVG) + '</div>';
+  if (d.PING_BEST) html += '<div class="rt-k">Ping最佳</div><div>' + esc(d.PING_BEST) + '</div>';
+  if (d.PING_LOSS) html += '<div class="rt-k">丢包率</div><div>' + esc(d.PING_LOSS) + '</div>';
+
+  // Download results
+  if (d.DL_AVG) html += '<div class="rt-k">下载均速</div><div>' + esc(d.DL_AVG) + '</div>';
+  if (d.DL_TOTAL_BYTES) html += '<div class="rt-k">下载量</div><div>' + esc(d.DL_TOTAL_BYTES) + '</div>';
+
+  // Upload results
+  if (d.UL_AVG) html += '<div class="rt-k">上传均速</div><div>' + esc(d.UL_AVG) + '</div>';
+
+  // IPv6 results
+  if (d.IPV6_STATUS) html += '<div class="rt-k">IPv6状态</div><div>' + esc(d.IPV6_STATUS) + '</div>';
+  if (d.IPV6_SCORE) html += '<div class="rt-k">IPv6评分</div><div>' + esc(d.IPV6_SCORE) + '</div>';
+  if (d.IPV6_WAN) html += '<div class="rt-k">IPv6 WAN</div><div>' + esc(d.IPV6_WAN) + '</div>';
+  if (d.IPV6_PUBLIC) html += '<div class="rt-k">IPv6公网</div><div>' + esc(d.IPV6_PUBLIC) + '</div>';
+  if (d.IPV6_DNS) html += '<div class="rt-k">IPv6 DNS</div><div>' + esc(d.IPV6_DNS) + '</div>';
+
+  // NAT results
+  if (d.NAT_TYPE) html += '<div class="rt-k">NAT类型</div><div>' + esc(d.NAT_TYPE) + '</div>';
+  if (d.NAT_DESC) html += '<div class="rt-k">NAT说明</div><div>' + esc(d.NAT_DESC) + '</div>';
+  if (d.NAT_PUBLIC_IP) html += '<div class="rt-k">公网IP</div><div>' + esc(d.NAT_PUBLIC_IP) + '</div>';
+
+  // Upstream results
+  if (d.UPSTREAM_GW) html += '<div class="rt-k">网关</div><div>' + esc(d.UPSTREAM_GW) + '</div>';
+  if (d.UPSTREAM_GW_LATENCY) html += '<div class="rt-k">网关延迟</div><div>' + esc(d.UPSTREAM_GW_LATENCY) + '</div>';
+  if (d.UPSTREAM_ISP_LATENCY) html += '<div class="rt-k">ISP延迟</div><div>' + esc(d.UPSTREAM_ISP_LATENCY) + '</div>';
+
+  // LAN results
+  if (d.LAN_LOOPBACK) html += '<div class="rt-k">回环速度</div><div>' + esc(d.LAN_LOOPBACK) + '</div>';
+
+  if (nk) nk.innerHTML = html || '<div class="rt-k">状态</div><div>等待网速测试</div>';
+
+  // Verdict for the big number
+  if (d.NET_DL_QUICK && d.NET_DL_QUICK !== 'FAILED') {
+    verdict = d.NET_DL_QUICK;
+    verdictClass = 'good';
+  } else if (d.DL_AVG && d.DL_AVG !== 'FAILED') {
+    verdict = d.DL_AVG;
+    verdictClass = 'good';
+  } else if (d.IPV6_STATUS) {
+    verdict = d.IPV6_STATUS;
+    verdictClass = d.IPV6_SCORE && parseInt(d.IPV6_SCORE) >= 8 ? 'good' : d.IPV6_SCORE && parseInt(d.IPV6_SCORE) >= 4 ? 'warnc' : 'bad';
+  } else if (d.NAT_TYPE) {
+    verdict = d.NAT_TYPE;
+    verdictClass = d.NAT_TYPE === 'PUBLIC' ? 'good' : d.NAT_TYPE === 'CGNAT' ? 'warnc' : 'info';
+  } else if (d.PING_AVG) {
+    verdict = d.PING_AVG;
+    verdictClass = 'info';
+  } else if (d.NET_QUICK_DONE || d.DL_DONE || d.UL_DONE || d.IPV6_DONE || d.NAT_DONE || d.UPSTREAM_DONE || d.PING_DONE) {
+    verdict = '✅ 完成';
+    verdictClass = 'good';
+  }
+
+  if (verdict) {
+    nv.textContent = verdict;
+    nv.className = 'rt-val ' + verdictClass;
+  }
+
+  // Sub text
+  var parts = [];
+  if (d.NET_PING_223 && d.NET_PING_223 !== 'timeoutms') parts.push('Ping ' + d.NET_PING_223);
+  if (d.NET_DL_QUICK && d.NET_DL_QUICK !== 'FAILED') parts.push('↓' + d.NET_DL_QUICK);
+  if (d.UL_AVG && d.UL_AVG !== 'FAILED') parts.push('↑' + d.UL_AVG);
+  if (d.IPV6_SCORE) parts.push('IPv6 ' + d.IPV6_SCORE);
+  if (d.NAT_TYPE) parts.push(d.NAT_TYPE);
+  if (ns && parts.length) ns.textContent = parts.join(' · ');
+}
+
+function runNetSpeed(action, btn) {
+  if (btn) {
+    document.querySelectorAll('.rt-tab').forEach(function(x){ x.classList.remove('active'); });
+    btn.classList.add('active');
+  }
+  var mode = qs('#net-mode') ? qs('#net-mode').value : 'quick';
+  if (!action) action = mode;
+  var w = qs('#log-wrap'); if (w) w.open = true;
+  var nv = qs('#net-val'); if (nv) { nv.textContent = '⏳ 测试中...'; nv.className = 'rt-val info'; }
+  var ns = qs('#net-sub'); if (ns) ns.textContent = '正在执行 ' + action + ' 测试...';
+  log('⏳ 正在执行 网络' + action + ' 测试...');
+  if (netPollTimer) { clearInterval(netPollTimer); netPollTimer = null; }
+
+  fetch(API_BASE + '/netspeed?action=' + encodeURIComponent(action), {credentials:'same-origin'})
+    .then(function(r){ return r.text(); })
+    .then(function(t){
+      var d = kv(t);
+      if (d.NET_ASYNC === '1') {
+        // Long test started in background, poll for results
+        log('⏳ 后台测试已启动，等待结果...');
+        netPollTimer = setInterval(function(){
+          fetch(API_BASE + '/netspeed?action=' + encodeURIComponent(action), {credentials:'same-origin'})
+            .then(function(r2){ return r2.text(); })
+            .then(function(t2){
+              var d2 = kv(t2);
+              log(t2);
+              if (d2.NET_STATUS !== 'started' && d2.NET_STATUS !== 'running' && !d2.NET_ASYNC) {
+                // Test complete
+                clearInterval(netPollTimer); netPollTimer = null;
+                updateNetFromKV(d2);
+                log('✅ 网络测试完成');
+              } else {
+                // Still running, update partial
+                updateNetFromKV(d2);
+              }
+            })
+            .catch(function(e){
+              clearInterval(netPollTimer); netPollTimer = null;
+              log('❌ 轮询失败：' + e);
+            });
+        }, 3000);
+      } else {
+        // Synchronous result
+        log(t);
+        updateNetFromKV(d);
+      }
+    })
+    .catch(function(e){ log('❌ 请求失败：' + e); });
 }
 function runHealth(action, btn){
   document.querySelectorAll('.rt-tab').forEach(function(x){ x.classList.remove('active'); });

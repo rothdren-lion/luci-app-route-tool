@@ -12,9 +12,10 @@ function index()
     entry({"admin", "system", "route_tool", "health"}, call("health"), nil).leaf = true
     entry({"admin", "system", "route_tool", "alloc_storage"}, call("alloc_storage"), nil).leaf = true
     entry({"admin", "system", "route_tool", "write_status"}, call("write_status"), nil).leaf = true
+    entry({"admin", "system", "route_tool", "netspeed"}, call("netspeed"), nil).leaf = true
 end
 
-local CURRENT_VERSION = "0.3.24-1"
+local CURRENT_VERSION = "0.3.30-1"
 local UPDATE_RELEASE_API_URL = "https://api.github.com/repos/rothdren-lion/luci-app-route-tool/releases/latest"
 
 local function allowed_part(p)
@@ -508,4 +509,53 @@ function alloc_storage()
         action = action,
         message = out ~= "" and out or (rc == 0 and "操作完成" or "操作失败 (exit " .. tostring(rc) .. ")")
     })
+end
+
+function netspeed()
+    local sys = require "luci.sys"
+    local fs = require "nixio.fs"
+    local action = luci.http.formvalue("action") or "quick"
+    -- Whitelist allowed actions
+    local allowed = {
+        quick = true, ping = true, download = true, upload = true,
+        ipv6 = true, nat = true, upstream = true, lan = true, full = true
+    }
+    if not allowed[action] then
+        luci.http.prepare_content("text/plain; charset=utf-8")
+        luci.http.write("ERROR=unknown action\nAVAILABLE=quick,ping,download,upload,ipv6,nat,upstream,lan,full\n")
+        return
+    end
+    -- Network tests can take a while; run in background and poll status
+    local status_file = "/tmp/route-tool-netspeed-status.txt"
+    local running_file = "/tmp/route-tool-netspeed-running"
+    -- Check if a test is already running
+    if fs.access(running_file) then
+        local elapsed = os.time() - tonumber(fs.readfile(running_file) or "0")
+        if elapsed < 120 then
+            -- Still running, return current progress
+            luci.http.prepare_content("text/plain; charset=utf-8")
+            luci.http.write(fs.readfile(status_file) or "NET_TEST=running\nNET_STATUS=测试进行中...\n")
+            return
+        end
+        -- Stale lock, remove it
+        os.remove(running_file)
+    end
+    -- For quick/ping/upstream: run synchronously (fast, <10s)
+    if action == "quick" or action == "ping" or action == "upstream" then
+        os.remove(status_file)
+        os.remove(running_file)
+        luci.http.prepare_content("text/plain; charset=utf-8")
+        luci.http.write(run_storage("network_speed.sh", action, "2>&1"))
+        return
+    end
+    -- For longer tests: run in background, return status
+    os.remove(status_file)
+    local f = io.open(running_file, "w")
+    if f then f:write(tostring(os.time())); f:close() end
+    sys.exec(string.format(
+        "( /usr/libexec/route-tool.d/network_speed.sh %s >%s 2>&1; rm -f %s ) &",
+        shellquote(action), status_file, running_file
+    ))
+    luci.http.prepare_content("text/plain; charset=utf-8")
+    luci.http.write("NET_TEST=" .. action .. "\nNET_STATUS=started\nNET_ASYNC=1\n")
 end
