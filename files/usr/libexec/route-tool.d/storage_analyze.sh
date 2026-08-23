@@ -148,14 +148,18 @@ if [ -n "$EXT_CSD" ] && [ ${#EXT_CSD} -ge 1000 ]; then
     echo "  TYP_B 寿命: $(decode_life "$LIFE_B_DEC")"
     echo "  PRE_EOL: ${PRE_EOL_DEC}"
 
-    # Health verdict
-    if [ "$PRE_EOL_DEC" -gt 0 ]; then
-        echo "  ⚠️  注意: PRE_EOL 非零，设备可能已接近寿命终点!"
-    elif [ "$LIFE_A_DEC" -le 3 ]; then
+    # Health verdict: PRE_EOL=1 is normal; use the worse of TYP_A/TYP_B.
+    LIFE_MAIN_DEC="$LIFE_A_DEC"
+    [ "$LIFE_B_DEC" -gt "$LIFE_MAIN_DEC" ] && LIFE_MAIN_DEC="$LIFE_B_DEC"
+    if [ "$PRE_EOL_DEC" -ge 3 ]; then
+        echo "  🚨 总体健康: 已到寿命预警"
+    elif [ "$PRE_EOL_DEC" -eq 2 ]; then
+        echo "  ⚠️  总体健康: 接近寿命预警"
+    elif [ "$LIFE_MAIN_DEC" -le 3 ]; then
         echo "  ✅ 总体健康: 良好 (已使用 < 30%)"
-    elif [ "$LIFE_A_DEC" -le 7 ]; then
+    elif [ "$LIFE_MAIN_DEC" -le 7 ]; then
         echo "  ⚠️  总体健康: 一般 (已使用 30%-70%)"
-    elif [ "$LIFE_A_DEC" -le 10 ]; then
+    elif [ "$LIFE_MAIN_DEC" -le 10 ]; then
         echo "  ❌ 总体健康: 需关注 (已使用 > 70%)"
     else
         echo "  🚨 总体健康: 危险 (已超出寿命!)"

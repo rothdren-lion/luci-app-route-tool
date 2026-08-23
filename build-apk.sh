@@ -13,7 +13,7 @@ RELEASE="$(grep PKG_RELEASE Makefile | sed 's/.*:=//')"
 FULL_VER="${VERSION}-r${RELEASE}"
 PKG_NAME="luci-app-route-tool"
 APK_FILE="${PKG_NAME}_${VERSION}-r${RELEASE}_all.apk"
-APK_BIN="${APK_TOOLS_BIN:-/tmp/apk-tools/build/src/apk}"
+APK_BIN="${APK_TOOLS_BIN:-$(command -v apk 2>/dev/null || true)}"
 
 echo "=== Building APK: ${PKG_NAME} ${FULL_VER} ==="
 
@@ -33,6 +33,11 @@ fi
 #   - --allow-untrusted needed on router since package is unsigned
 rm -f "$BASE/releases/$APK_FILE"
 mkdir -p "$BASE/releases"
+# Stage files separately: exclude *.orig backups from the package
+APK_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/route-tool-apk.XXXXXX")"
+trap 'rm -rf -- "$APK_STAGE"' EXIT HUP INT TERM
+cp -R --no-preserve=ownership,xattr "$BASE/files/." "$APK_STAGE/"
+find "$APK_STAGE" -name '*.orig' -delete
 
 "$APK_BIN" mkpkg \
     --info "name:${PKG_NAME}" \
@@ -45,7 +50,7 @@ mkdir -p "$BASE/releases"
     --info "maintainer:godsun.pro" \
     --info "depends:luci-base" \
     --info "tags:openwrt:section=luci" \
-    --files "$BASE/files" \
+    --files "$APK_STAGE" \
     --script "post-install:$BASE/CONTROL/postinst" \
     --script "pre-deinstall:$BASE/CONTROL/prerm" \
     --script "post-deinstall:$BASE/CONTROL/postrm" \

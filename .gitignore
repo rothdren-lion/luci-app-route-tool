@@ -4,6 +4,12 @@
 # Internal task tracking
 TASK_CODE_QUALITY.md
 
+# Secrets - never commit
+github-tokens.txt
+
+# Local data dumps
+emmcdata*
+
 # OS/editor
 .DS_Store
 *.pyc

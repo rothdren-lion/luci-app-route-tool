@@ -226,6 +226,28 @@ nand_brand_guess(){
     esac
 }
 
+has_spi_mtd(){
+    for m in /sys/class/mtd/mtd*; do
+        is_real_mtd_sysfs "$m" || continue
+        for f in "$m/device/modalias" "$m/device/uevent" "$m/device/name"; do
+            [ -r "$f" ] || continue
+            value="$(cat "$f" 2>/dev/null | head -n 1)"
+            case "$value" in *spi*) return 0 ;; esac
+        done
+    done
+    return 1
+}
+
+storage_kind(){
+    case "$1:$2:$3" in
+        1:*:1) echo "spi+emmc" ;;
+        1:*:*) echo "emmc" ;;
+        *:1:1) echo "spi+nand" ;;
+        *:1:*) echo "nand" ;;
+        *:*:1) echo "spi" ;;
+        *) echo "unknown" ;;
+    esac
+}
 storage_json(){
     emmc="$1"; base="$(basename "$emmc" 2>/dev/null)"
     printf '"storage":{'
@@ -251,7 +273,19 @@ storage_json(){
         done
     fi
     if [ "$nand_present" = true ]; then brand="$(nand_brand_guess)"; else brand=""; fi
-    printf '"nand":{"present":%s,"brand":"%s","chips":%s,"bad_blocks":%s},' "$nand_present" "$(printf '%s' "$brand" | json_escape)" "$nand_cnt" "$nand_bad"
+    emmc_flag=0; [ -n "$emmc" ] && emmc_flag=1
+    nand_flag=0; [ "$nand_present" = true ] && nand_flag=1
+    spi_flag=0; has_spi_mtd && spi_flag=1
+    kind="$(storage_kind "$emmc_flag" "$nand_flag" "$spi_flag")"
+    case "$kind" in
+        spi+emmc) label="SPI + eMMC" ;;
+        emmc) label="eMMC" ;;
+        spi+nand) label="SPI + NAND" ;;
+        nand) label="NAND" ;;
+        spi) label="SPI" ;;
+        *) label="未知" ;;
+    esac
+    printf '"nand":{"present":%s,"brand":"%s","chips":%s,"bad_blocks":%s},"kind":"%s","label":"%s",' "$nand_present" "$(printf '%s' "$brand" | json_escape)" "$nand_cnt" "$nand_bad" "$kind" "$label"
     printf '"extra":['
     detect_extra_storage_json
     printf ']'
@@ -450,18 +484,19 @@ alloc_storage(){
     confirm="${1:-}"
     emmc="$(find_emmc)" || { err "未发现 eMMC 设备"; exit 3; }
     base="$(basename "$emmc")"
+    export PATH="/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
     # Check for sgdisk, auto-install if missing
     if ! command -v sgdisk >/dev/null 2>&1; then
-        echo "正在安装 sgdisk (gdisk 包)..."
+        echo "正在从系统仓库安装 sgdisk..."
         if command -v apk >/dev/null 2>&1; then
             apk update >/dev/null 2>&1 || true
-            apk add gdisk >/dev/null 2>&1 || apk add --allow-untrusted gdisk >/dev/null 2>&1 || { err "gdisk 安装失败，请手动安装: apk update && apk add gdisk"; exit 4; }
+            apk add sgdisk >/dev/null 2>&1 || apk add --allow-untrusted sgdisk >/dev/null 2>&1 || { err "sgdisk 安装失败，请手动安装: apk update && apk add sgdisk"; exit 4; }
         elif command -v opkg >/dev/null 2>&1; then
-            opkg update >/dev/null 2>&1 || { err "opkg update 失败，无法自动安装 gdisk"; exit 4; }
-            opkg install gdisk >/dev/null 2>&1 || { err "gdisk 安装失败，请手动安装: opkg install gdisk"; exit 4; }
+            opkg update >/dev/null 2>&1 || { err "opkg update 失败，无法自动安装 sgdisk"; exit 4; }
+            opkg install sgdisk >/dev/null 2>&1 || { err "sgdisk 安装失败，请手动安装: opkg install sgdisk"; exit 4; }
         else
-            err "未找到包管理器(apk/opkg)，请手动安装 gdisk"; exit 4
+            err "未找到包管理器(apk/opkg)，请手动安装 sgdisk"; exit 4
         fi
         echo "sgdisk 安装完成。"
         # Re-hash PATH so newly installed binaries are found
@@ -471,7 +506,7 @@ alloc_storage(){
     fi
     # Final sanity check
     if ! command -v sgdisk >/dev/null 2>&1; then
-        err "sgdisk 仍不可用，请手动安装 gdisk 后重试"; exit 4
+        err "sgdisk 仍不可用，请手动安装 sgdisk 后重试"; exit 4
     fi
 
     # Find free space after last partition

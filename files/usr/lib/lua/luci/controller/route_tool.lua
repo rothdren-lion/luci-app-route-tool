@@ -12,7 +12,7 @@ function index()
     entry({"admin", "system", "route_tool", "health"}, call("health"), nil).leaf = true
     entry({"admin", "system", "route_tool", "alloc_storage"}, call("alloc_storage"), nil).leaf = true
     entry({"admin", "system", "route_tool", "write_status"}, call("write_status"), nil).leaf = true
-    entry({"admin", "system", "route_tool", "netspeed"}, call("netspeed"), nil).leaf = true
+    entry({"admin", "system", "route_tool", "unknown_emmc_report"}, call("unknown_emmc_report"), nil).leaf = true
 end
 
 local CURRENT_VERSION = "0.3.30-1"
@@ -511,51 +511,52 @@ function alloc_storage()
     })
 end
 
-function netspeed()
+function unknown_emmc_report()
     local sys = require "luci.sys"
     local fs = require "nixio.fs"
-    local action = luci.http.formvalue("action") or "quick"
-    -- Whitelist allowed actions
-    local allowed = {
-        quick = true, ping = true, download = true, upload = true,
-        ipv6 = true, nat = true, upstream = true, lan = true, full = true
-    }
-    if not allowed[action] then
-        luci.http.prepare_content("text/plain; charset=utf-8")
-        luci.http.write("ERROR=unknown action\nAVAILABLE=quick,ping,download,upload,ipv6,nat,upstream,lan,full\n")
-        return
-    end
-    -- Network tests can take a while; run in background and poll status
-    local status_file = "/tmp/route-tool-netspeed-status.txt"
-    local running_file = "/tmp/route-tool-netspeed-running"
-    -- Check if a test is already running
-    if fs.access(running_file) then
-        local elapsed = os.time() - tonumber(fs.readfile(running_file) or "0")
-        if elapsed < 120 then
-            -- Still running, return current progress
-            luci.http.prepare_content("text/plain; charset=utf-8")
-            luci.http.write(fs.readfile(status_file) or "NET_TEST=running\nNET_STATUS=测试进行中...\n")
-            return
+    local jsonc = require "luci.jsonc"
+
+    luci.http.prepare_content("application/json")
+
+    local action = luci.http.formvalue("action") or "info"
+
+    if action == "info" then
+        -- Collect unknown eMMC info
+        local cid_raw = sys.exec("cat /sys/class/mmc_host/mmc*/mmc*:*/cid 2>/dev/null | head -1 | tr -d '\\n '")
+        local manfid = cid_raw:sub(1, 2)
+        local ext_csd_path = sys.exec("ls /sys/class/mmc_host/mmc*/mmc*:*/ext_csd /sys/kernel/debug/mmc*/mmc*:*/ext_csd 2>/dev/null | head -1")
+        local ext_csd = ""
+        if ext_csd_path and ext_csd_path ~= "" then
+            ext_csd = sys.exec("cat " .. shellquote(ext_csd_path) .. " 2>/dev/null | tr -d '\\n ' | tr 'A-F' 'a-f'")
         end
-        -- Stale lock, remove it
-        os.remove(running_file)
-    end
-    -- For quick/ping/upstream: run synchronously (fast, <10s)
-    if action == "quick" or action == "ping" or action == "upstream" then
-        os.remove(status_file)
-        os.remove(running_file)
-        luci.http.prepare_content("text/plain; charset=utf-8")
-        luci.http.write(run_storage("network_speed.sh", action, "2>&1"))
+        local model = sys.exec("cat /tmp/sysinfo/model /proc/device-tree/model 2>/dev/null | head -1")
+        local version = sys.exec("cat /etc/openwrt_release 2>/dev/null | grep DISTRIB_RELEASE | cut -d'=' -f2 | tr -d '\"'")
+        local kernel = sys.exec("uname -r")
+
+        luci.http.write_json({
+            ok = true,
+            cid_raw = cid_raw,
+            manfid = "0x" .. manfid,
+            ext_csd = ext_csd,
+            ext_csd_len = #ext_csd,
+            model = model:gsub("^%s+", ""):gsub("%s+$", ""),
+            version = version:gsub("^%s+", ""):gsub("%s+$", ""),
+            kernel = kernel:gsub("^%s+", ""):gsub("%s+$", ""),
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+        })
         return
     end
-    -- For longer tests: run in background, return status
-    os.remove(status_file)
-    local f = io.open(running_file, "w")
-    if f then f:write(tostring(os.time())); f:close() end
-    sys.exec(string.format(
-        "( /usr/libexec/route-tool.d/network_speed.sh %s >%s 2>&1; rm -f %s ) &",
-        shellquote(action), status_file, running_file
-    ))
-    luci.http.prepare_content("text/plain; charset=utf-8")
-    luci.http.write("NET_TEST=" .. action .. "\nNET_STATUS=started\nNET_ASYNC=1\n")
+
+    if action == "config" then
+        -- Return WordPress comment reporting config
+        local uci = require "luci.model.uci".cursor()
+        luci.http.write_json({
+            ok = true,
+            wp_site = uci:get("route_tool", "general", "wp_site") or "",
+            wp_post_id = uci:get("route_tool", "general", "wp_post_id") or ""
+        })
+        return
+    end
+
+    luci.http.write_json({ ok = false, message = "未知动作" })
 end

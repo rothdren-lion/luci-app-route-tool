@@ -57,7 +57,7 @@ rt_emmc_manf_name() {
         25) echo "Kingston(金士顿)" ;;
         28) echo "Crucial(英睿达)/Lexar(雷克沙)" ;;
         29) echo "ADATA(威刚)" ;;
-        2c) echo "Kingston(金士顿)" ;;
+        2c) echo "Hikvision(海康)/HIKSEMI(海康存储)" ;;
         2d) echo "YMTC(长江存储)" ;;
         2e) echo "CXMT(长鑫存储)" ;;
         2f) echo "Konsemi(康芯威)" ;;
@@ -81,6 +81,7 @@ rt_emmc_manf_name() {
         88|d6) echo "Longsys(江波龙)" ;;
         f4) echo "BIWIN(佰维)" ;;
         ea) echo "SPeMMC/康盈/硅格" ;;
+        f2) echo "ICMAX(宏旺)" ;;
         fe) echo "Micron(美光)" ;;
         "") echo "未知" ;;
         *) echo "未知(0x$id)" ;;
@@ -97,6 +98,7 @@ rt_emmc_chip_name() {
         f4:426977696e*) echo "BIWIN(佰维) Biwin" ;;
         90:4841473265*) echo "SK Hynix(海力士) HAG2e" ;;
         90:4838473461*) echo "SK Hynix(海力士) H8G4a" ;;
+        2c:4853654d4d*) echo "HIKSEMI(海康存储) HSeMM" ;;
         2f:303553303030) echo "Konsemi(康芯威) 05S000" ;;
         ea:533033313131) echo "Kowin(康盈) S03111" ;;
         ea:5350654d4d43) echo "SiliconGo(硅格)/SPeMMC" ;;

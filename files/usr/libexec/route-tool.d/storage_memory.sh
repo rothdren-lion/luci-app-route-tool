@@ -141,62 +141,35 @@ get_cache_dir() {
     echo "/tmp"
 }
 
-# Download memtester binary if not found
-# Priority: opkg install → gwrt.uk → GitHub (fallback)
-# - Binary > 100KB → cache to eMMC hidden dir or /tmp
-# - Binary <= 100KB → opkg install (small enough for system)
+# Download the matching static memtester binary from this project's release.
 download_memtester() {
     local ARCH="$(uname -m)"
-    local GWRT_URL="https://gwrt.uk/wp-content/uploads/route-tool/memtester_${ARCH}"
     local GITHUB_URL="https://github.com/rothdren-lion/luci-app-route-tool/releases/latest/download/memtester_${ARCH}"
     local cache_dir="$(get_cache_dir)"
     local dest=""
 
-    # Priority 1: opkg install (most reliable, proper package management)
-    echo "尝试 opkg 安装 memtester..."
-    if command -v opkg >/dev/null 2>&1; then
-        opkg update >/dev/null 2>&1
-    else
-        echo "未找到 opkg，跳过包管理器安装。"
-    fi
-    if command -v opkg >/dev/null 2>&1 && opkg install memtester >/dev/null 2>&1; then
-        # Verify opkg-installed binary
-        if command -v memtester >/dev/null 2>&1; then
-            echo "OK=$(command -v memtester 2>/dev/null)"
-            return 0
-        fi
-    fi
-    echo "opkg 安装失败，尝试下载..."
-
-    # Priority 2: download from gwrt.uk (China-friendly, no GFW issues)
-    # Priority 3: fallback to GitHub
     mkdir -p "$cache_dir" 2>/dev/null
     dest="$cache_dir/memtester"
 
-    for url in "$GWRT_URL" "$GITHUB_URL"; do
-        echo "正在下载 memtester (${ARCH}) 从 $(echo $url | sed 's|.*//||' | cut -d/ -f1)..."
-        if command -v curl >/dev/null 2>&1; then
-            curl -fsSL --connect-timeout 15 --max-time 120 "$url" -o "$dest" 2>/dev/null
-        elif command -v wget >/dev/null 2>&1; then
-            wget -q --timeout=15 "$url" -O "$dest" 2>/dev/null
-        else
-            echo "ERROR=no_download_tool"
-            return 1
-        fi
+    echo "正在下载 memtester (${ARCH}) 从 GitHub..."
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 15 --max-time 120 "$GITHUB_URL" -o "$dest" 2>/dev/null
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q --timeout=15 "$GITHUB_URL" -O "$dest" 2>/dev/null
+    else
+        echo "ERROR=no_download_tool"
+        return 1
+    fi
 
-        if [ -s "$dest" ]; then
-            chmod 755 "$dest"
-            # Verify it runs
-            if "$dest" --help >/dev/null 2>&1 || [ -x "$dest" ]; then
-                echo "OK=$dest"
-                return 0
-            fi
+    if [ -s "$dest" ]; then
+        chmod 755 "$dest"
+        if "$dest" --help 2>&1 | grep -qi memtester; then
+            echo "OK=$dest"
+            return 0
         fi
-        rm -f "$dest"
-        echo "从 $(echo $url | sed 's|.*//||' | cut -d/ -f1) 下载失败，尝试下一个源..."
-    done
-
-    echo "ERROR=all_sources_failed"
+    fi
+    rm -f "$dest"
+    echo "ERROR=github_download_failed"
     return 1
 }
 
@@ -395,8 +368,10 @@ if [ "$MODE" = "capacity" ]; then
 
     # Parse memtester output for test results
     # Count "ok" lines and any "FAIL" lines
-    OK_COUNT=$(echo "$MEMTESTER_OUT" | grep -c "ok$" 2>/dev/null || echo 0)
-    FAIL_COUNT=$(echo "$MEMTESTER_OUT" | grep -ci "fail" 2>/dev/null || echo 0)
+    OK_COUNT=$(printf '%s\n' "$MEMTESTER_OUT" | grep -c "ok$" 2>/dev/null)
+    FAIL_COUNT=$(printf '%s\n' "$MEMTESTER_OUT" | grep -ci "fail" 2>/dev/null)
+    [ -n "$OK_COUNT" ] || OK_COUNT=0
+    [ -n "$FAIL_COUNT" ] || FAIL_COUNT=0
     echo "MEM_CAPACITY_TESTS_OK=${OK_COUNT}"
     echo "MEM_CAPACITY_TESTS_FAIL=${FAIL_COUNT}"
 
