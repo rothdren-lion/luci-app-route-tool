@@ -76,7 +76,7 @@ rt_emmc_manf_name() {
         9b) echo "YMTC(长江存储)" ;;
         d9) echo "Apacer(宇瞻)" ;;
         df) echo "SYC(时意创)" ;;
-        ec) echo "ATO/JingCun(晶存)" ;;
+        ec) echo "Rayson(晶存)" ;;
         # 国产/代工
         88|d6) echo "Longsys(江波龙)" ;;
         f4) echo "BIWIN(佰维)" ;;
@@ -105,7 +105,7 @@ rt_emmc_chip_name() {
         15:41474e443352) echo "Samsung(三星) AGND3R" ;;
         15:384754463452) echo "Samsung(三星) 8GTF4R" ;;
         11:303034473630) echo "Toshiba(东芝) 004G60" ;;
-        ec:415432533338) echo "ATO/JingCun(晶存) AT2S38" ;;
+        ec:415432533338) echo "Rayson(晶存) AT2S38 (eMMC 5.1)" ;;
         df:534341303847) echo "SYC(时意创) SCA08G" ;;
         88:4e43617264) echo "Longsys(江波龙) NCard" ;;
         9b:593053323536) echo "YMTC(长江存储) Y0S256" ;;
