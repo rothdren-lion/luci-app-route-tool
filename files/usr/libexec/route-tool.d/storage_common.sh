@@ -80,7 +80,7 @@ rt_emmc_manf_name() {
         # 国产/代工
         88|d6) echo "Longsys(江波龙)" ;;
         f4) echo "BIWIN(佰维)" ;;
-        ea) echo "SPeMMC/康盈/硅格" ;;
+        ea) echo "SPeMMC/硅格(SiliconGo)/康盈(Kowin)" ;;
         f2) echo "ICMAX(宏旺)" ;;
         fe) echo "Micron(美光)" ;;
         "") echo "未知" ;;
@@ -94,21 +94,21 @@ rt_emmc_chip_name() {
     pnm="$(printf '%s' "$2" | tr 'A-F' 'a-f')"
     pnm="${pnm#0x}"
     case "$mid:$pnm" in
-        f4:415142313154) echo "BIWIN(佰维) AQB11T" ;;
-        f4:426977696e*) echo "BIWIN(佰维) Biwin" ;;
-        90:4841473265*) echo "SK Hynix(海力士) HAG2e" ;;
-        90:4838473461*) echo "SK Hynix(海力士) H8G4a" ;;
-        2c:4853654d4d*) echo "HIKSEMI(海康存储) HSeMM" ;;
-        2f:303553303030) echo "Konsemi(康芯威) 05S000" ;;
-        ea:533033313131) echo "Kowin(康盈) S03111" ;;
-        ea:5350654d4d43) echo "SiliconGo(硅格)/SPeMMC" ;;
-        15:41474e443352) echo "Samsung(三星) AGND3R" ;;
-        15:384754463452) echo "Samsung(三星) 8GTF4R" ;;
-        11:303034473630) echo "Toshiba(东芝) 004G60" ;;
-        ec:415432533338) echo "Rayson(晶存) AT2S38 (eMMC 5.1)" ;;
-        df:534341303847) echo "SYC(时意创) SCA08G" ;;
-        88:4e43617264) echo "Longsys(江波龙) NCard" ;;
-        9b:593053323536) echo "YMTC(长江存储) Y0S256" ;;
+        f4:415142313154) echo "BIWIN(佰维)" ;;
+        f4:426977696e*) echo "BIWIN(佰维)" ;;
+        90:4841473265*) echo "SK Hynix(海力士)" ;;
+        90:4838473461*) echo "SK Hynix(海力士)" ;;
+        2c:4853654d4d*) echo "HIKSEMI(海康存储)" ;;
+        2f:303553303030) echo "Konsemi(康芯威)" ;;
+        ea:533033313131) echo "Kowin(康盈)" ;;
+        ea:5350654d4d43) echo "SiliconGo(硅格)" ;;
+        15:41474e443352) echo "Samsung(三星)" ;;
+        15:384754463452) echo "Samsung(三星)" ;;
+        11:303034473630) echo "Toshiba(东芝)" ;;
+        ec:415432533338) echo "Rayson(晶存)" ;;
+        df:534341303847) echo "SYC(时意创)" ;;
+        88:4e43617264) echo "Longsys(江波龙)" ;;
+        9b:593053323536) echo "YMTC(长江存储)" ;;
         *) rt_emmc_manf_name "$mid" ;;
     esac
 }
