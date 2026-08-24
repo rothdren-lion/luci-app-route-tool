@@ -15,7 +15,7 @@ function index()
     entry({"admin", "system", "route_tool", "unknown_emmc_report"}, call("unknown_emmc_report"), nil).leaf = true
 end
 
-local CURRENT_VERSION = "0.3.30-1"
+local CURRENT_VERSION = "0.3.31-1"
 local UPDATE_RELEASE_API_URL = "https://api.github.com/repos/rothdren-lion/luci-app-route-tool/releases/latest"
 
 local function allowed_part(p)
