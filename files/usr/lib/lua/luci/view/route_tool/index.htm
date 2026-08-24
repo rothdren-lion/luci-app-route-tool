@@ -47,11 +47,10 @@
 .rt-bar>i{display:block;height:100%;background:#27ae60;width:0;transition:width .3s}
 .rt-life-row{display:grid;grid-template-columns:34px minmax(100px,1fr) 58px;align-items:center;gap:8px;margin-top:7px;font-size:12px}
 .rt-life-label{font-weight:700;color:#666}
-.rt-life-bar{height:22px;position:relative;background:#e0e0e0;border-radius:8px;overflow:hidden}
-.rt-life-bar>i{position:absolute;inset:0 auto 0 0;width:0;background:#27ae60;transition:width .3s}
+.rt-life-bar{height:22px;position:relative;border-radius:8px;overflow:hidden;background:linear-gradient(to right,#27ae60 0%,#27ae60 80%,#f39c12 80%,#f39c12 90%,#e74c3c 90%,#e74c3c 100%)}
+.rt-life-bar::after{content:'';position:absolute;top:0;bottom:0;right:0;width:var(--rt-left,100%);background:#e0e0e0;transition:width .3s}
 .rt-life-bar>span{position:relative;z-index:1;display:block;line-height:22px;text-align:center;font-weight:800;color:#222}
 .rt-life-analysis{text-align:right;font-weight:700;white-space:nowrap}
-.rt-life-bar.warnc>i{background:#f39c12}.rt-life-bar.bad>i{background:#e74c3c}
 .rt-part-wrap{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;align-items:start;margin-top:12px}
 .rt-donut-panel{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px}
 .rt-donut{position:relative;width:150px;height:150px;border-radius:50%}
@@ -582,8 +581,8 @@ function updateEmmcFromKV(d) {
     var rawText = qs(item[2]);
     var analysisText = qs(item[3]);
     if (lifeBar) {
-      lifeBar.className = 'rt-life-bar ' + (!hasVal || usedPct === 0 ? '' : used <= 3 ? 'good' : used <= 7 ? 'warnc' : 'bad');
-      lifeBar.firstElementChild.style.width = usedPct === null ? '0%' : usedPct + '%';
+      lifeBar.className = 'rt-life-bar';
+      lifeBar.style.setProperty('--rt-left', (!hasVal ? 100 : 100 - usedPct) + '%');
     }
     if (rawText) rawText.textContent = available ? String(item[0]) : '--';
     if (analysisText) analysisText.textContent = !hasVal ? '读取不到' : used === 0 ? '0' : used >= 11 ? '100%（到期）' : '已用' + (used - 1) * 10 + '-' + (used * 10) + '%';
