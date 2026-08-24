@@ -359,7 +359,7 @@ list_json(){
     emmc="$(find_emmc 2>/dev/null || true)"
     printf '{"name":"route-tool","footer":"by 数码罗记 · godsun.pro","emmc":"%s","has_gpt":%s,' "$(printf '%s' "$emmc" | json_escape)" "$([ -n "$emmc" ] && echo true || echo false)"
     storage_json "$emmc"
-    printf '"unallocated_mb":%s' "$(storage_unalloc_mb "$emmc")"
+    printf ',"unallocated_mb":%s' "$(storage_unalloc_mb "$emmc")"
     printf ',"parts":['
     first=1
     if [ -n "$emmc" ]; then
