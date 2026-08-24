@@ -76,9 +76,17 @@ for d in /sys/class/mmc_host/mmc*/mmc*:*; do
 done
 if [ -n "$MMC_SYS" ]; then
     CID_RAW="$(cat "$MMC_SYS/cid" 2>/dev/null | tr -d '\n ')"
-    [ -n "$CID_RAW" ] && echo "EMMC_CID=$CID_RAW"
-    MANFID="$(printf '%s' "$CID_RAW" | cut -c1-2)"
-    echo "EMMC_MANUFACTURER=$(rt_emmc_manf_name "$MANFID")"
+    if [ -n "$CID_RAW" ]; then
+        echo "EMMC_CID=$CID_RAW"
+        # CID offsets: MID=1-2, RSV/CBX=3-4, OID=5-6, PNM=7-18, PRV=19-20, PSN=21-28, MDT=29-30
+        MANFID="$(printf '%s' "$CID_RAW" | cut -c1-2)"
+        PRDCT_HEX="$(printf '%s' "$CID_RAW" | cut -c7-18)"
+        echo "EMMC_MANUFACTURER=$(rt_emmc_chip_name "$MANFID" "$PRDCT_HEX")"
+        PRDCT="$(rt_hex2ascii "$PRDCT_HEX")"
+        [ -n "$PRDCT" ] || PRDCT="$PRDCT_HEX"
+        echo "EMMC_PRODUCT=$PRDCT"
+        echo "EMMC_MFG_DATE=$(rt_cid_mdt "$(printf '%s' "$CID_RAW" | cut -c29-30)")"
+    fi
     if [ -n "$EXT_CSD" ]; then
         BOOT1_HEX="$(rt_ext_csd_byte_hex "$EXT_CSD" 226)"
         BOOT2_HEX="$(rt_ext_csd_byte_hex "$EXT_CSD" 227)"

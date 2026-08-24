@@ -205,7 +205,6 @@ function updateCapacity(d) {
   if (d.EMMC_TOTAL_MB) html += '<div class="rt-k">eMMC总量</div><div>' + fmtMB(d.EMMC_TOTAL_MB) + '</div>';
   html += capRow('ROM', d.ROM_TOTAL_MB, d.ROM_FREE_MB, d.ROM_USED_MB, d.ROM_USED_PCT, d.ROM_DEV, d.ROM_MOUNT);
   html += capRow('Overlay', d.OVERLAY_TOTAL_MB, d.OVERLAY_FREE_MB, d.OVERLAY_USED_MB, d.OVERLAY_USED_PCT, d.OVERLAY_DEV, d.OVERLAY_MOUNT);
-  html += capRow('根分区', d.ROOT_TOTAL_MB, d.ROOT_FREE_MB, d.ROOT_USED_MB, d.ROOT_USED_PCT, d.ROOT_DEV, d.ROOT_MOUNT);
 
   if (d.EMMC_DATA_MOUNT) {
     html += capRow('eMMC数据', d.EMMC_DATA_TOTAL_MB, d.EMMC_DATA_FREE_MB, d.EMMC_DATA_USED_MB, d.EMMC_DATA_USED_PCT, d.EMMC_DATA_DEV, d.EMMC_DATA_MOUNT);
@@ -576,20 +575,25 @@ function updateEmmcFromKV(d) {
   [[lifeA, '#eol-a-bar', '#eol-a-raw', '#eol-a-text'], [lifeB, '#eol-b-bar', '#eol-b-raw', '#eol-b-text']].forEach(function(item) {
     var available = item[0] !== undefined && item[0] !== null && item[0] !== '';
     var used = parseInt(item[0], 10);
-    var left = available && !isNaN(used) && used > 0 ? Math.max(0, 100 - Math.min(used, 10) * 10) : null;
+    var hasVal = available && !isNaN(used);
+    // 寿命顺序值: 1=已用0-10% 2=10-20% ... 10=90-100% 11(B)=100%
+    var usedPct = !hasVal ? null : used >= 11 ? 100 : used * 10;
     var lifeBar = qs(item[1]);
     var rawText = qs(item[2]);
     var analysisText = qs(item[3]);
     if (lifeBar) {
-      lifeBar.className = 'rt-life-bar ' + (used >= 11 ? 'bad' : left === null ? '' : left > 70 ? 'good' : left > 30 ? 'warnc' : 'bad');
-      lifeBar.firstElementChild.style.width = left === null ? '0%' : left + '%';
+      lifeBar.className = 'rt-life-bar ' + (!hasVal || usedPct === 0 ? '' : used <= 3 ? 'good' : used <= 7 ? 'warnc' : 'bad');
+      lifeBar.firstElementChild.style.width = usedPct === null ? '0%' : usedPct + '%';
     }
     if (rawText) rawText.textContent = available ? String(item[0]) : '--';
-    if (analysisText) analysisText.textContent = !available ? '读取不到' : used === 0 ? '0' : used >= 11 ? '寿命到期' : left + '%';
+    if (analysisText) analysisText.textContent = !hasVal ? '读取不到' : used === 0 ? '0' : used >= 11 ? '100%（到期）' : '已用' + (used - 1) * 10 + '-' + (used * 10) + '%';
   });
   if (box) {
     box.innerHTML =
       (d.EMMC_MANUFACTURER ? '<div class="rt-k">颗粒品牌</div><div>' + esc(d.EMMC_MANUFACTURER) + (maybeShowReportBtn(d.EMMC_MANUFACTURER) ? ' <button class="btn cbi-button rt-btn-danger rt-small" onclick="reportUnknownEmmc()" style="margin-left:8px;padding:2px 8px;font-size:11px">上报未知厂商</button>' : '') + '</div>' : '') +
+      (d.EMMC_PRODUCT ? '<div class="rt-k">产品型号</div><div>' + esc(d.EMMC_PRODUCT) + '</div>' : '') +
+      (d.EMMC_MFG_DATE ? '<div class="rt-k">生产日期</div><div>' + esc(d.EMMC_MFG_DATE) + '</div>' : '') +
+      (d.EMMC_PRE_EOL_TEXT && d.EMMC_FOUND === '1' ? '<div class="rt-k">预警</div><div>' + esc(d.EMMC_PRE_EOL_TEXT) + '</div>' : '') +
       (d.EMMC_VERSION ? '<div class="rt-k">eMMC 版本</div><div>' + esc(d.EMMC_VERSION) + '</div>' : '') +
       (d.EMMC_BOOT1_SIZE_KB ? '<div class="rt-k">BOOT1/2</div><div>' + fmtKB(d.EMMC_BOOT1_SIZE_KB) + ' / ' + fmtKB(d.EMMC_BOOT2_SIZE_KB) + '</div>' : '') +
       (d.EMMC_RPMB_SIZE_KB && parseInt(d.EMMC_RPMB_SIZE_KB) > 0 ? '<div class="rt-k">RPMB</div><div>' + fmtKB(d.EMMC_RPMB_SIZE_KB) + '</div>' : '') +
@@ -606,7 +610,10 @@ function updateSpeedFromKV(d) {
   if (skv) {
     var info = [];
     if (d.EMMC_MANUFACTURER) info.push('颗粒: ' + d.EMMC_MANUFACTURER);
+    if (d.EMMC_PRODUCT) info.push('型号: ' + d.EMMC_PRODUCT);
+    if (d.EMMC_MFG_DATE) info.push('生产: ' + d.EMMC_MFG_DATE);
     if (d.EMMC_VERSION) info.push('eMMC ' + d.EMMC_VERSION);
+    if (d.EMMC_PRE_EOL_TEXT) info.push('预警: ' + d.EMMC_PRE_EOL_TEXT);
     if (d.EMMC_BOOT1_SIZE_KB) info.push('BOOT1: ' + fmtKB(d.EMMC_BOOT1_SIZE_KB));
     if (d.EMMC_BOOT2_SIZE_KB) info.push('BOOT2: ' + fmtKB(d.EMMC_BOOT2_SIZE_KB));
     if (d.EMMC_RPMB_SIZE_KB && d.EMMC_RPMB_SIZE_KB !== '0') info.push('RPMB: ' + fmtKB(d.EMMC_RPMB_SIZE_KB));
