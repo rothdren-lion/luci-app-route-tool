@@ -17,6 +17,37 @@ rt_hex2dec() {
     esac
 }
 
+# Convert a hex string to printable ASCII (non-printable bytes dropped).
+rt_hex2ascii() {
+    h="$(printf '%s' "$1" | tr -d ' ')"
+    out=""
+    while [ -n "$h" ]; do
+        pair="${h%${h#??}}"
+        h="${h#??}"
+        c="$(rt_hex2dec "$pair")"
+        if [ "$c" -ge 32 ] && [ "$c" -le 126 ]; then
+            out="$out$(printf "\\$(printf '%03o' "$c")")"
+        fi
+    done
+    printf '%s\n' "$out"
+}
+
+# Decode the eMMC CID MDT field (bits [15:8], two hex chars):
+# high nibble = year offset from 1997, low nibble = month (1-12).
+rt_cid_mdt() {
+    mdt="$(printf '%s' "$1" | tr -d ' ')"
+    case "$mdt" in
+        ??) ;;
+        *) echo "?/?"; return ;;
+    esac
+    year_off="$(rt_hex2dec "$(printf '%s' "$mdt" | cut -c1)")"
+    month="$(rt_hex2dec "$(printf '%s' "$mdt" | cut -c2)")"
+    year=$((1997 + year_off))
+    { [ "$month" -ge 1 ] && [ "$month" -le 12 ]; } 2>/dev/null || month="?"
+    [ "$year" -le 2099 ] 2>/dev/null || year="?"
+    printf '%s/%s\n' "$month" "$year"
+}
+
 rt_cache_fresh() {
     file="$1"
     age="$2"

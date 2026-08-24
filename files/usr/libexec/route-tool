@@ -254,9 +254,18 @@ storage_json(){
     printf '"emmc":{"present":%s' "$([ -n "$emmc" ] && echo true || echo false)"
     if [ -n "$emmc" ]; then
         cid="$(cat /sys/class/block/$base/device/cid /sys/block/$base/device/cid 2>/dev/null | head -n 1)"
+        # CID offsets: MID=1-2, OID=5-6, PNM=7-18, PRV=19-20, PSN=21-28
         manfid="$(printf '%s' "$cid" | cut -c1-2)"
-        prod="$(printf '%s' "$cid" | cut -c5-16)"
-        maker="$(emmc_manf_name "$manfid" "$prod")"; fw="$(printf '%s' "$cid" | cut -c13-14)"; serial="$(printf '%s' "$cid" | cut -c15-22)"
+        prod_hex="$(printf '%s' "$cid" | cut -c7-18)"
+        fw="$(printf '%s' "$cid" | cut -c19-20)"
+        serial="$(printf '%s' "$cid" | cut -c21-28)"
+        maker="$(emmc_manf_name "$manfid" "$prod_hex")"
+        if command -v rt_hex2ascii >/dev/null 2>&1; then
+            prod="$(rt_hex2ascii "$prod_hex")"
+        else
+            prod="$prod_hex"
+        fi
+        [ -n "$prod" ] || prod="$prod_hex"
         cap="$(block_size "$emmc" 2>/dev/null || echo 0)"
         health="$(emmc_health_text)"
         printf ',"dev":"%s","manufacturer":"%s","manufacturer_id":"0x%s","product":"%s","fwrev":"%s","serial":"%s","cid":"%s","capacity":%s,"health":"%s"' \

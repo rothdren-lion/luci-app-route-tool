@@ -75,25 +75,23 @@ for cid_path in /sys/class/mmc_host/mmc*/mmc*:*/cid /sys/kernel/debug/mmc*/mmc*:
     [ -f "$cid_path" ] && CID=$(cat "$cid_path" 2>/dev/null) && break
 done
 
-if [ -n "$CID" ] && [ ${#CID} -ge 16 ]; then
+# CID field offsets: MID=1-2, RSV/CBX=3-4, OID=5-6, PNM=7-18, PRV=19-20, PSN=21-28, MDT=29-30
+if [ -n "$CID" ] && [ ${#CID} -ge 30 ]; then
     MANFID=$(echo "$CID" | cut -c1-2)
-    OEMID=$(echo "$CID" | cut -c3-4)
-    PRDCT=$(echo "$CID" | cut -c5-16)
-    SERIAL=$(echo "$CID" | cut -c15-22)
-    DATE_RAW=$(echo "$CID" | cut -c23-26)
+    OEMID=$(echo "$CID" | cut -c5-6)
+    PRDCT_HEX=$(echo "$CID" | cut -c7-18)
+    SERIAL=$(echo "$CID" | cut -c21-28)
+    MDT=$(echo "$CID" | cut -c29-30)
 
-    MANF="$(rt_emmc_chip_name "$MANFID" "$PRDCT")"
-
-    # Decode CID date through printf-based helper; old BusyBox ash may not accept hex literals in arithmetic expansion.
-    DATE_MONTH="$(rt_hex2dec "$(echo "$DATE_RAW" | cut -c1-1)")"
-    DATE_YEAR=$((2000 + $(rt_hex2dec "$(echo "$DATE_RAW" | cut -c2-4)")))
-    [ "$DATE_MONTH" -gt 12 ] && DATE_MONTH="?"
+    MANF="$(rt_emmc_chip_name "$MANFID" "$PRDCT_HEX")"
+    PRDCT="$(rt_hex2ascii "$PRDCT_HEX")"
+    [ -n "$PRDCT" ] || PRDCT="$PRDCT_HEX"
 
     echo "  制造商: $MANF (ID: 0x${MANFID})"
     echo "  OEM ID: 0x${OEMID}"
     echo "  产品名: ${PRDCT}"
     echo "  序列号: 0x${SERIAL}"
-    echo "  生产日期: ${DATE_MONTH}/${DATE_YEAR}"
+    echo "  生产日期: $(rt_cid_mdt "$MDT")"
     echo "  CID 原始值: ${CID}"
 else
     echo "  ⚠️ 无法读取 CID 寄存器"
