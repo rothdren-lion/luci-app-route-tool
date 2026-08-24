@@ -51,6 +51,12 @@
 .rt-life-bar::after{content:'';position:absolute;top:0;bottom:0;right:0;width:var(--rt-left,100%);background:#e0e0e0;transition:width .3s}
 .rt-life-bar>span{position:relative;z-index:1;display:block;line-height:22px;text-align:center;font-weight:800;color:#222}
 .rt-life-analysis{text-align:right;font-weight:700;white-space:nowrap}
+.rt-cap-flex{display:flex;align-items:center;gap:14px;margin:4px 0 8px}
+.rt-cap-ring{--cap:0;position:relative;width:68px;height:68px;border-radius:50%;background:conic-gradient(#27ae60 calc(var(--cap)*1%),#e0e0e0 0);flex:0 0 68px}
+.rt-cap-ring.warn{background:conic-gradient(#f39c12 calc(var(--cap)*1%),#e0e0e0 0)}
+.rt-cap-ring.bad{background:conic-gradient(#e74c3c calc(var(--cap)*1%),#e0e0e0 0)}
+.rt-cap-ring:after{content:'';position:absolute;inset:9px;border-radius:50%;background:var(--cbi-section-bg,#fff)}
+.rt-cap-ring b{position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#222}
 .rt-part-wrap{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;align-items:start;margin-top:12px}
 .rt-donut-panel{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px}
 .rt-donut{position:relative;width:150px;height:150px;border-radius:50%}
@@ -108,7 +114,7 @@
   <div class="rt-health-grid" id="dashboard">
     <div class="rt-card"><div class="rt-title">🖥 SoC</div><div class="rt-val" id="soc-val">--</div><div class="rt-meta rt-kv" id="soc-kv"></div></div>
     <div class="rt-card"><div class="rt-title">🌐 网口</div><div class="rt-val" id="port-val">--</div><div class="rt-meta rt-kv" id="port-kv"></div></div>
-    <div class="rt-card"><div class="rt-title">💽 容量</div><div class="rt-val" id="storage-val">--</div><div class="rt-meta" id="storage-sub">等待容量信息</div><div class="rt-meta rt-kv" id="storage-kv"></div></div>
+    <div class="rt-card"><div class="rt-title">💽 容量</div><div class="rt-cap-flex"><div class="rt-cap-ring" id="storage-ring"><b id="storage-ring-pct">--</b></div><div><div class="rt-val" id="storage-val">--</div><div class="rt-meta" id="storage-sub">等待容量信息</div></div></div><div class="rt-meta rt-kv" id="storage-kv"></div></div>
     <div class="rt-card" id="emmc-card"><div class="rt-title">🔲 eMMC 寿命 <span class="rt-badge" id="emmc-detect">检测中</span></div><div class="rt-life-row"><span class="rt-life-label">SLC</span><div class="rt-life-bar" id="eol-a-bar"><i></i><span id="eol-a-raw">--</span></div><span class="rt-life-analysis" id="eol-a-text">读取不到</span></div><div class="rt-life-row"><span class="rt-life-label">MLC</span><div class="rt-life-bar" id="eol-b-bar"><i></i><span id="eol-b-raw">--</span></div><span class="rt-life-analysis" id="eol-b-text">读取不到</span></div><div class="rt-meta rt-kv" id="emmc-kv"></div></div>
     <div class="rt-card" id="emmc-speed-card"><div class="rt-title">🚀 eMMC 读写速度</div><div class="rt-val" id="speed-val">--</div><div class="rt-meta" id="speed-sub">等待测速</div><div class="rt-meta rt-kv" id="speed-kv"></div></div>
     <div class="rt-card"><div class="rt-title">🧠 内存检测 <span class="rt-badge" style="background:#fff3cd;border-color:#ffc107;color:#856404">下拉选择模式</span></div><div class="rt-val" id="mem-val" style="font-size:20px">--</div><div class="rt-meta" id="mem-sub">下拉选模式，点"内存测试"按钮执行；选"完整性"首次运行会自动从 GitHub 下载 memtester。</div></div>
@@ -201,6 +207,19 @@ function updateCapacity(d) {
 
   val.textContent = typ + (mainFree ? ' · 剩余' + fmtMB(mainFree) : '');
   if (sub && mainTotal) sub.textContent = '运行 ' + fmtMB(mainUsed) + ' / 总量 ' + fmtMB(mainTotal) + '，已用 ' + esc(mainPct);
+  // 占比圆环: 颜色随已用比例变化(<70绿 <90黄 ≥90红)
+  var ring = qs('#storage-ring');
+  if (ring) {
+    var capPct = parseFloat(String(mainPct).replace('%', ''));
+    if (isNaN(capPct) && mainTotal && mainUsed) capPct = Math.round(parseInt(mainTotal, 10) ? mainUsed / parseInt(mainTotal, 10) * 100 : 0);
+    if (!isNaN(capPct)) {
+      capPct = Math.max(0, Math.min(100, Math.round(capPct)));
+      ring.style.setProperty('--cap', capPct);
+      ring.className = 'rt-cap-ring' + (capPct >= 90 ? ' bad' : capPct >= 70 ? ' warn' : '');
+      var capTxt = qs('#storage-ring-pct');
+      if (capTxt) capTxt.textContent = capPct + '%';
+    }
+  }
   if (d.EMMC_TOTAL_MB) html += '<div class="rt-k">eMMC总量</div><div>' + fmtMB(d.EMMC_TOTAL_MB) + '</div>';
   // 分区明细由下方环形图(#cards)展示, 这里不再重复 ROM/Overlay 行
 
