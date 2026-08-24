@@ -202,8 +202,7 @@ function updateCapacity(d) {
   val.textContent = typ + (mainFree ? ' · 剩余' + fmtMB(mainFree) : '');
   if (sub && mainTotal) sub.textContent = '运行 ' + fmtMB(mainUsed) + ' / 总量 ' + fmtMB(mainTotal) + '，已用 ' + esc(mainPct);
   if (d.EMMC_TOTAL_MB) html += '<div class="rt-k">eMMC总量</div><div>' + fmtMB(d.EMMC_TOTAL_MB) + '</div>';
-  html += capRow('ROM', d.ROM_TOTAL_MB, d.ROM_FREE_MB, d.ROM_USED_MB, d.ROM_USED_PCT, d.ROM_DEV, d.ROM_MOUNT);
-  html += capRow('Overlay', d.OVERLAY_TOTAL_MB, d.OVERLAY_FREE_MB, d.OVERLAY_USED_MB, d.OVERLAY_USED_PCT, d.OVERLAY_DEV, d.OVERLAY_MOUNT);
+  // 分区明细由下方环形图(#cards)展示, 这里不再重复 ROM/Overlay 行
 
   if (d.EMMC_DATA_MOUNT) {
     html += capRow('eMMC数据', d.EMMC_DATA_TOTAL_MB, d.EMMC_DATA_FREE_MB, d.EMMC_DATA_USED_MB, d.EMMC_DATA_USED_PCT, d.EMMC_DATA_DEV, d.EMMC_DATA_MOUNT);
