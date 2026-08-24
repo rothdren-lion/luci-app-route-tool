@@ -335,10 +335,31 @@ part_type(){
     return 1
 }
 
+storage_unalloc_mb(){
+    # 检测eMMC末尾未分配空间(MB): 末分区结束扇区到磁盘尾, 对齐1MB
+    base="$(basename "$1" 2>/dev/null)"
+    [ -n "$base" ] && [ -f "/sys/class/block/$base/size" ] || { echo 0; return; }
+    last_end=0
+    for p in /sys/class/block/${base}p*; do
+        [ -f "$p/size" ] && [ -f "$p/start" ] || continue
+        pe=$(( $(cat "$p/start" 2>/dev/null || echo 0) + $(cat "$p/size" 2>/dev/null || echo 0) - 1 ))
+        [ "$pe" -gt "$last_end" ] 2>/dev/null && last_end=$pe
+    done
+    [ "$last_end" -gt 0 ] 2>/dev/null || { echo 0; return; }
+    disk_end=$(( $(cat /sys/class/block/$base/size) - 1 ))
+    next_start=$(( (last_end + 1 + 2047) / 2048 * 2048 ))
+    if [ "$next_start" -le "$disk_end" ] 2>/dev/null; then
+        echo $(( (disk_end - next_start + 1) * 512 / 1024 / 1024 ))
+    else
+        echo 0
+    fi
+}
+
 list_json(){
     emmc="$(find_emmc 2>/dev/null || true)"
     printf '{"name":"route-tool","footer":"by 数码罗记 · godsun.pro","emmc":"%s","has_gpt":%s,' "$(printf '%s' "$emmc" | json_escape)" "$([ -n "$emmc" ] && echo true || echo false)"
     storage_json "$emmc"
+    printf '"unallocated_mb":%s' "$(storage_unalloc_mb "$emmc")"
     printf ',"parts":['
     first=1
     if [ -n "$emmc" ]; then
@@ -604,13 +625,18 @@ alloc_storage(){
         next_pnum=$((max_pnum + 1))
 
         local warn=""
+        local reserve_note=""
         if [ "$free_mb" -lt 500 ]; then
             warn="⚠️ 可用空间仅 ${free_mb}MB，可能是厂商预留的未使用空间，新建分区可能影响系统稳定性。"
+        fi
+        # 尾部预留提示
+        if [ "$((free_sectors - 8192))" -gt 4096 ] 2>/dev/null; then
+            reserve_note="（尾部预留4MB）"
         fi
         printf "将在 %s 上新建分区：\n" "$emmc"
         printf "  起始扇区: %s (对齐 1MB)\n" "$next_start"
         printf "  结束扇区: %s\n" "$disk_end"
-        printf "  大小: %s MB\n" "$free_mb"
+        printf "  大小: %s MB%s\n" "$free_mb" "$reserve_note"
         printf "  分区名: storage (p%d)\n" "$next_pnum"
         printf "  文件系统: ext4\n"
         printf "  UUID: 48d0489a-e32f-49be-a46d-91cf1dac4da9\n"
@@ -698,8 +724,16 @@ alloc_storage(){
     done
     next_pnum=$((max_pnum + 1))
 
+    # === Step 3.5: 尾部预留 — 分区不到磁盘末尾, 留 4MB 给 GPT 备份区/坏块余量 ===
+    RESERVE_SECTORS=8192   # 4MB
+    new_end=0              # 0 = sgdisk 默认(到最后可用扇区)
+    if [ "$free_sectors" -gt $((RESERVE_SECTORS + 4096)) ] && [ "$next_start" -lt $((disk_end - RESERVE_SECTORS)) ]; then
+        new_end=$((disk_end - RESERVE_SECTORS))
+        echo "ℹ️ 尾部预留 ${RESERVE_SECTORS}扇区(4MB), 分区结束于 $new_end (磁盘尾 $disk_end)"
+    fi
+
     # === Step 4: Dry-run with sgdisk -P to validate parameters ===
-    dry_err="$(sgdisk -P -n "${next_pnum}:${next_start}:0" -c "${next_pnum}:storage" -t "${next_pnum}:8300" "$emmc" 2>&1)" || {
+    dry_err="$(sgdisk -P -n "${next_pnum}:${next_start}:${new_end}" -c "${next_pnum}:storage" -t "${next_pnum}:8300" "$emmc" 2>&1)" || {
         err "sgdisk dry-run 验证失败，拒绝创建分区: $dry_err"
         exit 6
     }
@@ -709,7 +743,7 @@ alloc_storage(){
 
     # === Step 6: Create partition (execute ONLY ONCE, end=0 lets sgdisk use last usable sector) ===
     echo "正在新建分区 (p${next_pnum})..."
-    create_out="$(sgdisk -n "${next_pnum}:${next_start}:0" -c "${next_pnum}:storage" -t "${next_pnum}:8300" "$emmc" 2>&1)"
+    create_out="$(sgdisk -n "${next_pnum}:${next_start}:${new_end}" -c "${next_pnum}:storage" -t "${next_pnum}:8300" "$emmc" 2>&1)"
     create_rc=$?
     if [ "$create_rc" -ne 0 ]; then
         # sgdisk may return non-zero even after writing GPT (e.g. warnings)

@@ -67,6 +67,8 @@
 .rt-part-list{display:grid;gap:7px}
 .rt-part-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(120px,auto) auto;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--border-color,#ddd);border-radius:8px;background:var(--cbi-section-bg,#fff)}
 .rt-part-row.rt-danger{border-color:#d9534f}.rt-part-name{display:flex;align-items:center;gap:6px;min-width:0}.rt-part-name>i{width:10px;height:10px;border-radius:50%;flex:0 0 10px}.rt-part-name code{font-size:11px}.rt-part-size{text-align:right;font-size:12px}.rt-part-size code{display:block;font-size:10px;opacity:.75}.rt-part-row .rt-actions{margin:0;flex-wrap:nowrap}.rt-part-row .rt-actions .btn{padding:4px 8px;font-size:11px}.rt-alloc-row{grid-template-columns:minmax(180px,1fr) auto}
+.rt-unalloc-big{border-color:#27ae60;box-shadow:0 0 0 1px #27ae60 inset}
+.rt-unalloc-hl{color:#27ae60;font-weight:900}
 .rt-fw-row{grid-template-columns:58px minmax(180px,1fr) auto}
 .rt-fw-ring{--fw-progress:0;position:relative;width:52px;height:52px;border-radius:50%;background:conic-gradient(#3498db calc(var(--fw-progress)*1%),#e0e0e0 0)}
 .rt-fw-ring:after{content:'';position:absolute;inset:7px;border-radius:50%;background:var(--cbi-section-bg,#fff)}
@@ -826,7 +828,12 @@ function render(data){
   });
   if(!parts.length) html+='<div class="rt-part-row">没有发现支持的分区。</div>';
   if(e.present){
-    html+='<div class="rt-part-row rt-alloc-row"><div><b>eMMC 未分配空间</b><div class="rt-small">新建 storage 分区并挂载到 /mnt/</div></div><div class="rt-actions"><button class="btn cbi-button cbi-button-apply" onclick="allocStoragePreview()">预览</button><button class="btn cbi-button rt-btn-danger" onclick="allocStorageCreate()">新建</button></div></div>';
+    var unalloc=parseInt(data.unallocated_mb||0,10)||0;
+    var big=unalloc>=1024;
+    var unallocDesc = big
+      ? '<span class="rt-unalloc-hl">✨ 检测到 '+fmtSize(unalloc*1024*1024)+' 可用空间，可建立分区</span>'
+      : (unalloc>0 ? '检测到 '+fmtSize(unalloc*1024*1024)+' 未分配空间' : '暂未检测到未分配空间');
+    html+='<div class="rt-part-row rt-alloc-row'+(big?' rt-unalloc-big':'')+'"><div><b>eMMC 未分配空间</b><div class="rt-small">'+unallocDesc+' · 新建 storage 分区并挂载到 /mnt/（自动尾部预留4MB）</div></div><div class="rt-actions"><button class="btn cbi-button cbi-button-apply" onclick="allocStoragePreview()">预览</button><button class="btn cbi-button rt-btn-danger" onclick="allocStorageCreate()">新建</button></div></div>';
   }
   html+='<div class="rt-part-row rt-fw-row"><div class="rt-fw-ring" id="fw-progress-ring"><span id="fw-progress-pct">固件</span></div><div><b>更新固件 <span class="rt-badge rt-badge-fw">sysupgrade</span></b><div id="fw-status" class="rt-meta">选择兼容固件；写入时请勿断电。</div><label class="rt-check"><input id="fw-keepcfg" type="checkbox" checked><span>保留当前配置</span></label></div><div class="rt-actions"><button class="btn cbi-button cbi-button-apply" onclick="chooseSysupgrade()">选择固件</button><input class="rt-upload" id="fw-file" type="file" onchange="doSysupgrade(this)"></div></div>';
   html+='</div>';
