@@ -18,12 +18,13 @@ rt_hex2dec() {
 }
 
 # Convert a hex string to printable ASCII (non-printable bytes dropped).
+# Uses cut-based slicing so odd-length input cannot loop forever.
 rt_hex2ascii() {
     h="$(printf '%s' "$1" | tr -d ' ')"
     out=""
-    while [ -n "$h" ]; do
-        pair="${h%${h#??}}"
-        h="${h#??}"
+    while [ $(printf '%s' "$h" | wc -c) -ge 2 ]; do
+        pair="$(printf '%s' "$h" | cut -c1-2)"
+        h="$(printf '%s' "$h" | cut -c3-)"
         c="$(rt_hex2dec "$pair")"
         if [ "$c" -ge 32 ] && [ "$c" -le 126 ]; then
             out="$out$(printf "\\$(printf '%03o' "$c")")"
@@ -33,18 +34,18 @@ rt_hex2ascii() {
 }
 
 # Decode the eMMC CID MDT field (bits [15:8], two hex chars):
-# high nibble = year offset from 1997, low nibble = month (1-12).
+# high nibble = month (1-12), low nibble = year offset from 2013 (eMMC 4.5+ layout).
+# Verified against XGecu T76 programmer dumps of 60+ real chips:
+# e.g. MDT=0x37 -> 2020-03, 0xca -> 2023-12, 0x13 -> 2016-01.
 rt_cid_mdt() {
     mdt="$(printf '%s' "$1" | tr -d ' ')"
     case "$mdt" in
         ??) ;;
         *) echo "?/?"; return ;;
     esac
-    year_off="$(rt_hex2dec "$(printf '%s' "$mdt" | cut -c1)")"
-    month="$(rt_hex2dec "$(printf '%s' "$mdt" | cut -c2)")"
-    year=$((1997 + year_off))
+    month="$(rt_hex2dec "$(printf '%s' "$mdt" | cut -c1)")"
+    year=$((2013 + $(rt_hex2dec "$(printf '%s' "$mdt" | cut -c2)")))
     { [ "$month" -ge 1 ] && [ "$month" -le 12 ]; } 2>/dev/null || month="?"
-    [ "$year" -le 2099 ] 2>/dev/null || year="?"
     printf '%s/%s\n' "$month" "$year"
 }
 
@@ -106,7 +107,7 @@ rt_emmc_manf_name() {
         90) echo "SK Hynix(海力士)" ;;
         9b) echo "YMTC(长江存储)" ;;
         d9) echo "Apacer(宇瞻)" ;;
-        df) echo "SYC(时意创)" ;;
+        df) echo "SYC(时意创)/SiliconGo(硅格)" ;;
         ec) echo "Rayson(晶存)" ;;
         # 国产/代工
         88|d6) echo "Longsys(江波龙)" ;;
@@ -137,7 +138,8 @@ rt_emmc_chip_name() {
         15:384754463452) echo "Samsung(三星)" ;;
         11:303034473630) echo "Toshiba(东芝)" ;;
         ec:415432533338) echo "Rayson(晶存)" ;;
-        df:534341303847) echo "SYC(时意创)" ;;
+        # SYC 时意创 SCA08G/SCA128 系列
+        df:534341*) echo "SYC(时意创)" ;;
         88:4e43617264) echo "Longsys(江波龙)" ;;
         9b:593053323536) echo "YMTC(长江存储)" ;;
         *) rt_emmc_manf_name "$mid" ;;
