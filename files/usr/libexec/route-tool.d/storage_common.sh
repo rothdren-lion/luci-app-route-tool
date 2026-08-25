@@ -138,6 +138,8 @@ rt_emmc_chip_name() {
         15:384754463452) echo "Samsung(三星)" ;;
         11:303034473630) echo "Toshiba(东芝)" ;;
         ec:415432533338) echo "Rayson(晶存)" ;;
+        # MID 0x70 默认金士顿; 实测小度8X的 MG2608 为三星贴片(PNM前缀4d47323630)
+        70:4d473236303*) echo "Samsung(三星)" ;;
         # SYC 时意创 SCA08G/SCA128 系列
         df:534341*) echo "SYC(时意创)" ;;
         88:4e43617264) echo "Longsys(江波龙)" ;;
